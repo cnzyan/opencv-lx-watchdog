@@ -1,0 +1,25 @@
+1、请先编辑 alert_words.txt 设置 触发关键字，每行一个关键字
+2、请在 setup.ini 设置推送参数，其中：
+[config]段：
+window_title = 2024内部单位处置群   	设置监视蓝信群的名称
+alert_mp3_file = alert.mp3          	设置报警声文件名
+send_wxmsg = 1				设置是否发送微信通知
+send_email = 1				设置是否发送Email通知
+send_serial=1               设置是否发送串口通知，请准备两台电脑及COM口通讯线
+ocr_method = tesseract			设置OCR引擎，paddle适用于新款支持AVX的电脑；tesseract适用于老款不支持AVX的 电脑；easyocr为新款电脑备用。使用tesseract引擎需要预先安装引擎，安装文件放在tesseract文件夹中
+[Email]段：
+smtp_host = smtp.qq.com			设置SMTP服务器
+smtp_port = 465				设置SMTP端口
+mail_user = 111@qq.com			设置SMTP用户
+mail_pass = 111				设置SMTP密码
+sender_email = 111@qq.com		设置显示的发信人邮箱地址
+email_receivers = 111@qq.com		设置接收邮箱地址，多个邮箱使用“,”分割
+smtptype = SSL				设置SMTP协议模式，无加密请留空，加密请根据服务器要求设置为SSL或TLS
+[serial]段:
+serialdev_in = COM2,9600,1  设置内网监视关键字的计算机外送COM口参数
+serialdev_out = COM1,9600,1 设置外网发送邮件、微信通知的计算机接收COM参数
+
+注意：请不要忘记安装Python
+版本更新说明：
+本版本监视特定蓝信群聊天窗口，请将要监视的蓝信群 独立 拖动 为单独的窗口，监视期间请勿操作计算机，勿打开任务管理器，勿将微信等窗口固定在最前，否则可能导致无法正常识别关键字
+3、请运行 StartWD.bat 开始监视屏幕
