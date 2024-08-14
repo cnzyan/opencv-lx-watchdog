@@ -316,7 +316,7 @@ def check_screen():
             print("Same Msg sent already, skip")
             pass
         else:
-            # requests.get(url="http://pi.tzxy.cn/pi/app/wxadminsiteerr.asp?content="+word, verify=False)
+            # requests.get(url="http://pi.111.cn/pi/app/wxadminsiteerr.asp?content="+word, verify=False)
             if conf_wxmsg:
                 wxmsg(wxmsg_touser, word)
             if conf_email:
