@@ -570,14 +570,15 @@ def get_index_of_list(list, element):  # 获取列表中元素的索引
 
 
 def check_unread_msg(image, ocr_resp):
-    all_text = ''
-    for word in ocr_resp['text']:
-        all_text = all_text+word
+
     # print(alert_msg)
     text_to_detect = "条新消息"
     detect_list = ["条新消息", "条新", "条新消", "条", "新消息", "新消", "新", "消息", "消", "息"]
     unread_detected = False
     if ocr_method == "tesseract":
+        all_text = ''
+        for word in ocr_resp['text']:
+            all_text = all_text+word
         if ocr_detail == 1:
 
             for chr in text_to_detect:
@@ -626,8 +627,6 @@ def check_unread_msg(image, ocr_resp):
                 return False
 
             if unread_detected == True:
-                pos = [ocr_resp['left'][index], ocr_resp['top'][index],
-                       ocr_resp['width'][index], ocr_resp['height'][index]]
                 return pos
             else:
                 continue
