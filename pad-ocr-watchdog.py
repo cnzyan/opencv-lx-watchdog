@@ -23,7 +23,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 requests.packages.urllib3.disable_warnings()
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE" #允许 Intel AI OpenMP 库的重复加载
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 允许 Intel AI OpenMP 库的重复加载
 # .venv\Scripts\Activate.ps1
 # pip install -r requirements.txt
 # pyinstaller -F pad-ocr-watchdog.py
@@ -1164,6 +1164,11 @@ def quit_program():
     app_run = False
     root.destroy()  # 结束Tk事件循环
     try:
+        w_console.show() # 显示控制台
+        w_console.restore() # 恢复窗口
+    except:
+        pass
+    try:
         sys.exit(0)
     except:
         pass
@@ -1177,6 +1182,7 @@ def quit_program():
 
 @new_thread
 def splash_play():
+
     global splash
 
     def play_animation():
@@ -1242,6 +1248,13 @@ def splash_play():
 
 
 if __name__ == "__main__":
+    try:
+        w_title = "C:\\WINDOWS\\system32\\cmd.exe"
+        w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
+        w_console.minimize() # 最小化窗口
+        w_console.hide() # 隐藏窗口
+    except:
+        pass
     import argparse
     parser = argparse.ArgumentParser(description='桌面关键字监视器')
     parser.add_argument('--UseSerial', type=str, default='no',

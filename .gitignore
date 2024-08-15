@@ -3,6 +3,8 @@ dist/
 .paddleocr/
 __pycache__/
 ffmpeg-*/
+*.zip
+*.rar
 backup/
 paddleocr/
 screenshots/
