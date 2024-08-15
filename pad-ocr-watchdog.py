@@ -378,10 +378,11 @@ def ocr_img_text(
                         print(word)
                 else:
                     print(line)
-    else: # tesseract
+    else:  # tesseract
         if conf_detail == 1:
-            result = pytesseract.image_to_data(image, lang="chi_sim+eng", output_type=pytesseract.Output.DICT)
-            
+            result = pytesseract.image_to_data(
+                image, lang="chi_sim+eng", output_type=pytesseract.Output.DICT)
+
             if printResult is True:
                 print(result)
         else:
@@ -489,7 +490,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                     fullscreen = "yes"
                 # 获取窗口的位置和大小
                 x, y, width, height = window.left, window.top, window.width, window.height
-                w_left,w_top=window.left,window.top
+                w_left, w_top = window.left, window.top
                 # 截取窗口的屏幕截图
                 screenshot = pyautogui.screenshot(region=(x, y, width, height))
             except Exception as e:
@@ -559,82 +560,91 @@ def clean_msg_store():
     global alert_msg
     alert_msg = []
 
-def get_index_of_list(list, element): # 获取列表中元素的索引
+
+def get_index_of_list(list, element):  # 获取列表中元素的索引
     try:
-        index = [i for i,x in enumerate(list) if x == element]
+        index = [i for i, x in enumerate(list) if x == element]
     except ValueError:
         index = [-1]
     return index
 
-def check_unread_msg(image,ocr_resp):
+
+def check_unread_msg(image, ocr_resp):
     all_text = ''
     for word in ocr_resp['text']:
         all_text = all_text+word
     # print(alert_msg)
-    text_to_detect="条新消息"
-    detect_list = ["条新消息","条新","条新消","条","新消息","新消","新","消息","消","息"]
+    text_to_detect = "条新消息"
+    detect_list = ["条新消息", "条新", "条新消", "条", "新消息", "新消", "新", "消息", "消", "息"]
     unread_detected = False
     if ocr_method == "tesseract":
         if ocr_detail == 1:
-            
+
             for chr in text_to_detect:
                 if chr not in all_text:
                     return False
 
-            for word in ocr_resp['text']:      
+            for word in ocr_resp['text']:
                 if word in detect_list:
-                    pos_index=get_index_of_list(ocr_resp['text'], word)
-                    if word!=text_to_detect:
+                    pos_index = get_index_of_list(ocr_resp['text'], word)
+                    if word != text_to_detect:
                         for index in pos_index:
                             if index != -1:
                                 if ocr_resp['text'][index+1] in detect_list:
                                     print("Unread Msg Found!!!")
                                     textPad_insert("Unread Msg Found!!!")
-                                    unread_detected=True
+                                    unread_detected = True
                     else:
                         print("Unread Msg Found!!!")
                         textPad_insert("Unread Msg Found!!!")
-                        unread_detected=True
+                        unread_detected = True
                     break
             if unread_detected == True:
-                pos=[ocr_resp['left'][index],ocr_resp['top'][index],ocr_resp['width'][index],ocr_resp['height'][index]]
+                pos = [ocr_resp['left'][index], ocr_resp['top'][index],
+                       ocr_resp['width'][index], ocr_resp['height'][index]]
                 return pos
             else:
                 return False
-    if ocr_method=="paddle" or ocr_method=="easyocr":
+    if ocr_method == "paddle" or ocr_method == "easyocr":
         for line in ocr_resp:
             if line == [] or line == "":
                 continue
             if ocr_method == "paddle":
                 for word in line:
                     if text_to_detect in word[1][0]:
-                        unread_detected=True
-                        pos=[word[0][0][0],word[0][0][1],word[0][2][0]-word[0][0][0],word[0][2][1]-word[0][0][1]]
+                        unread_detected = True
+                        pos = [word[0][0][0], word[0][0][1], word[0][2]
+                               [0]-word[0][0][0], word[0][2][1]-word[0][0][1]]
 
             elif ocr_method == "easyocr":
                 if ocr_detail == 1:
                     if text_to_detect in line[1]:
-                        unread_detected=True
-                        pos=[line[0][0][0],line[0][0][1],line[0][2][0]-line[0][0][0],line[0][2][1]-line[0][0][1]]
+                        unread_detected = True
+                        pos = [line[0][0][0], line[0][0][1], line[0][2]
+                               [0]-line[0][0][0], line[0][2][1]-line[0][0][1]]
             else:
                 return False
-            
+
             if unread_detected == True:
-                pos=[ocr_resp['left'][index],ocr_resp['top'][index],ocr_resp['width'][index],ocr_resp['height'][index]]
+                pos = [ocr_resp['left'][index], ocr_resp['top'][index],
+                       ocr_resp['width'][index], ocr_resp['height'][index]]
                 return pos
             else:
                 continue
         pass
+
 
 def click_unread_msg(pos):
     pos_x = pos[0]+pos[2]/2 + w_left
     pos_y = pos[1]+pos[3]/2 + w_top
     pyautogui.click(pos_x, pos_y, button='left')
     textPad_insert("Mouse Click At "+str(pos_x)+","+str(pos_y))
-    #pyautogui.click(100, 150, button='left')
-    #pyautogui.click('屏幕区块.png')
+    # pyautogui.click(100, 150, button='left')
+    # pyautogui.click('屏幕区块.png')
     pass
 # 检查屏幕内容
+
+
 @new_thread
 def check_screen():
     global alert_msg, alert_words, alert_mp3_file, wxmsg_touser, last_sent_seprate
@@ -658,12 +668,12 @@ def check_screen():
     )
     if ocr_method == "tesseract":
         if ocr_detail == 1:
-            ocr_temp=''
+            ocr_temp = ''
             for i in range(len(ocr_resp["text"])):
                 if ocr_resp["text"][i] != "":  # 去除空行
-                    ocr_temp = ocr_temp+ocr_resp["text"][i] 
+                    ocr_temp = ocr_temp+ocr_resp["text"][i]
             ocr_resp_tes = ocr_temp
-            
+
         else:
             ocr_resp_tes = ocr_resp
 
@@ -702,10 +712,10 @@ def check_screen():
                 break
     if ocr_detail == 1 or ocr_method == "paddle":
         # 检查未读消息
-        pos=check_unread_msg(image,ocr_resp)
-        if pos!=False:
+        pos = check_unread_msg(image, ocr_resp)
+        if pos != False:
             click_unread_msg(pos)
-    
+
     if alert_found == True:
         word = word.strip()
         print("ALerT Word FOUND!!!ALLLERRRRRTTTTT", word)
@@ -1266,8 +1276,8 @@ def quit_program():
     app_run = False
     root.destroy()  # 结束Tk事件循环
     try:
-        w_console.show() # 显示控制台
-        w_console.restore() # 恢复窗口
+        w_console.show()  # 显示控制台
+        w_console.restore()  # 恢复窗口
     except:
         pass
     try:
@@ -1353,8 +1363,8 @@ if __name__ == "__main__":
     try:
         w_title = "Screen OCR Watchdog"
         w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
-        w_console.minimize() # 最小化窗口
-        w_console.hide() # 隐藏窗口
+        w_console.minimize()  # 最小化窗口
+        w_console.hide()  # 隐藏窗口
     except:
         pass
     import argparse
@@ -1370,7 +1380,7 @@ if __name__ == "__main__":
     last_sent_seprate = ''
     alert_msg = []
     img_md5_list = []
-    w_left,w_top=0,0
+    w_left, w_top = 0, 0
     debug = False
     log_path = './logs'
     if not os.path.isdir(log_path):
