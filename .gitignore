@@ -24,6 +24,7 @@ ffplay.exe
 setup.ini
 contacts.txt
 alert_words.txt
+img_md5_list.txt
 *.build/
 *.dist/
 *.onefile-build/

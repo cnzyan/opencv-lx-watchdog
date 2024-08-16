@@ -1274,6 +1274,9 @@ def quit_program():
     global app_run
     app_run = False
     root.destroy()  # 结束Tk事件循环
+    with open("img_md5_list.txt", "w", encoding="utf-8") as f:
+        for item in img_md5_list:
+            f.write(item+"\n")
     try:
         w_console.show()  # 显示控制台
         w_console.restore()  # 恢复窗口
@@ -1360,7 +1363,7 @@ def splash_play():
 
 if __name__ == "__main__":
     try:
-        w_title = "Screen OCR Watchdog"
+        w_title = "Screen OCR Watchdog" # 控制台窗口标题 通过 title 命令在bat文件中设置
         w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
         w_console.minimize()  # 最小化窗口
         w_console.hide()  # 隐藏窗口
@@ -1379,6 +1382,10 @@ if __name__ == "__main__":
     last_sent_seprate = ''
     alert_msg = []
     img_md5_list = []
+    if os.path.exists("img_md5_list.txt") == True:
+        with open("img_md5_list.txt", "r", encoding="utf-8") as f:
+            for line in f.readlines():
+                img_md5_list.append(line.strip())
     w_left, w_top = 0, 0
     debug = False
     log_path = './logs'
