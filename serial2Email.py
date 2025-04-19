@@ -1,4 +1,5 @@
 import serial
+import serial.tools.list_ports
 import xmodem
 import time
 import loguru

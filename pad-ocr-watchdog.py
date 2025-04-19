@@ -713,8 +713,11 @@ def check_screen():
         # 检查未读消息
         pos = check_unread_msg(image, ocr_resp)
         if pos != False:
-            click_unread_msg(pos)
-
+            try:
+                click_unread_msg(pos)
+            except Exception as e:
+                print("Mouse Click Error."+str(e))
+                textPad_insert("Mouse Click Error."+str(e))
     if alert_found == True:
         word = word.strip()
         print("ALerT Word FOUND!!!ALLLERRRRRTTTTT", word)
@@ -772,7 +775,7 @@ def check_screen():
             if conf_serial:
                 serial_send("email", contents)
 
-            if send_seprate == True:
+            if send_seprate == True: # 根据联系人组分组发送消息
                 if last_sent_seprate != contents:
                     send_sep(ocr_method, ocr_resp, contents)
                     last_sent_seprate = contents
@@ -880,11 +883,12 @@ def send_sep(ocr, data, contents=""):
 
 # 发送微信消息
 
-
+import urllib
 @new_thread
 def wxmsg(touser, content):
     global secret_seed, wxmsg_url, wxmsg_method
     wechatdata = "touser=" + touser
+    content=urllib.parse.quote(content,encoding='utf-8')
     wechatdata = wechatdata + "&cont=[" + content + "]hvv-lx-msg"
 
     secret = hashlib.md5(
@@ -1164,6 +1168,10 @@ def prepare_conf_file(configpath):  # 准备配置文件
         config.set("config", "alert_words", r"alert_words.txt")
         config.set("config", "contacts", r"contacts.txt")
         config.set("config", "send_seprate", r"1")
+        # config.set("config", "daemon_permit", r"1")
+        config.set("config", "daemon_interval", r"5")
+        config.set("config", "auto_reply", r"1") #
+        config.set("config", "auto_reply_text", r"5")
 
         config.add_section("Email")
         config.set("Email", "email_method", r"")
@@ -1212,6 +1220,9 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
         "alert_words": "alert_words.txt",
         "contacts": "contacts.txt",
         "send_seprate": "1",
+        "auto_reply": "1",
+        "auto_reply_text": "收到，立即处置",
+        "daemon_interval": "5",
         "wxmsg_url_get": "http://pi.111.cn/pi/app/wxadminsiteerr.asp",
         "wxmsg_url_post": "https://pi.111.cn/PI/app/overlimwx.php",
         "wxmsg_method": "POST",
@@ -1363,7 +1374,7 @@ def splash_play():
 
 if __name__ == "__main__":
     try:
-        w_title = "Screen OCR Watchdog" # 控制台窗口标题 通过 title 命令在bat文件中设置
+        w_title = "Screen OCR Watchdog"  # 控制台窗口标题 通过 title 命令在bat文件中设置
         w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
         w_console.minimize()  # 最小化窗口
         w_console.hide()  # 隐藏窗口
@@ -1399,7 +1410,7 @@ if __name__ == "__main__":
     # 定义文件路径
     configpath = r".\setup.ini"
     prepare_conf_file(configpath)
-    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, window_title, conf_serial, send_snapshot, send_seprate = (
+    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, window_title, conf_serial, send_snapshot, send_seprate,auto_reply,auto_reply_text = (
         get_conf_from_file(
             configpath,
             "config",
@@ -1413,6 +1424,8 @@ if __name__ == "__main__":
                 "send_serial",
                 "send_snapshot",
                 "send_seprate",
+                "auto_reply",
+                "auto_reply_text",
             ],
         )
     )

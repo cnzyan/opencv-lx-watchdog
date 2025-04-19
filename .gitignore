@@ -7,6 +7,7 @@ ffmpeg-*/
 *.rar
 backup/
 paddleocr/
+paddleocr1/
 screenshots/
 recv_files/
 web_apps/
