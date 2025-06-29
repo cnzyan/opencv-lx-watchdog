@@ -1,7 +1,7 @@
 pyautogui
 common
 paddlepaddle
-paddleocr
+paddleocr==2.10.0
 requests
 numpy
 pillow
@@ -9,10 +9,12 @@ schedule
 chardet
 setuptools
 loguru
-easyocr
-pytesseract
+# easyocr
+# pytesseract
 pyserial
 xmodem
 pygetwindow
 pygame
 pycryptodome
+keyboard
+pystray

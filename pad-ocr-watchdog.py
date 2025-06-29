@@ -1,40 +1,50 @@
 from Crypto.Cipher import AES
 from pyautogui import *
+import keyboard
 from PIL import Image
 from PIL import ImageGrab
 from PIL import ImageTk, ImageSequence
 import numpy
 import time
 import requests
+import urllib
 import schedule
 import smtplib
 import loguru
 import hashlib
 import os
+import sys
+import re
 import base64
 import configparser
 import chardet
 import tkinter as tk
 import pygetwindow
 import pyautogui
+import pystray
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
+import threading
+from functools import wraps
+import queue
+# to fix OSError: [WinError 127] 找不到指定的程序。 Error loading "C:\Users\cnzya\AppData\Roaming\Python\Python313\site-packages\torch\lib\shm.dll" or one of its dependencies.
+# import torch
+# fix end
 requests.packages.urllib3.disable_warnings()
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 允许 Intel AI OpenMP 库的重复加载
 # .venv\Scripts\Activate.ps1
 # pip install -r requirements.txt
 # pyinstaller -F pad-ocr-watchdog.py
+VERSION_TEXT = "ProG By CrazYan 202408/upd202506"
+CONTACT_FILE = "conf_contacts.txt"
+ALERT_WORDS_FILE = "conf_alert_words.txt"
+MSG_GROUP_FILE = "conf_msg_groups.txt"
 
-# 在新线程中运行函数
 
-
-def new_thread(func):
-    import threading
-    from functools import wraps
-
+def new_thread1(func):
+    # 在新线程中运行函数
     @wraps(func)
     def inner(*args, **kwargs):
         # print(f'函数的名字：{func.__name__}')
@@ -44,11 +54,19 @@ def new_thread(func):
 
     return inner
 
-# 调用播放音频报警函数
+
+def new_thread(fn):
+    def wrapper(*args, **kwargs):
+        t = threading.Thread(target=fn, args=args, kwargs=kwargs)
+        t.daemon = True  # 设置为守护线程
+        t.start()
+        return t
+    return wrapper
 
 
 @new_thread
 def play_music(file_path):
+    # 调用播放音频报警函数
     play_method = "pygame"
     if play_method == "ffplay":
         import os
@@ -71,18 +89,16 @@ def play_music(file_path):
         playsound.playsound(file_path, False)
         print('Alert Sound Playing...')
 
-# 在文本框中插入文本
-
 
 def textPad_insert(text):
+    # 在文本框中插入文本
     global textPad
     textPad.insert("end", text+"\n")
     textPad.see("end")
 
-# 播放音频报警
-
 
 def run_play_music():
+    # 播放音频报警
     global alert_mp3_file, alert_permit, daemon_permit
     if os.path.exists(alert_mp3_file) == False:
         alert_mp3_file = "alert.mp3"
@@ -90,14 +106,14 @@ def run_play_music():
         play_music(alert_mp3_file)
     else:
         if daemon_permit == True:
-            print("Alert Permitted is False, Skip Play Music")
+            print(".", end="")
+            # print("Alert Permitted is False, Skip Play Music")
         else:
             pass
 
-# 切换音频报警状态/是否允许播放音频报警
-
 
 def set_alert_permit(tag="none"):
+    # 切换音频报警状态/是否允许播放音频报警
     global alert_permit, textPad
     if tag == "on":
         alert_permit = True
@@ -115,10 +131,9 @@ def set_alert_permit(tag="none"):
         print("Alert MP3 Play Not Permitted")
         textPad_insert("Alert MP3 Play Not Permitted")
 
-# 切换监视状态
-
 
 def set_daemon_permit(tag="none"):
+    # 切换监视状态
     global daemon_permit, textPad
     if tag == "on":
         daemon_permit = True
@@ -144,18 +159,16 @@ def get_curtime(time_format="%Y-%m-%d %H:%M:%S"):
     return curTime
 '''
 
-# 获取时间戳，offset为偏移天数
-
 
 def get_curtime(time_format="%Y-%m-%d %H:%M:%S", offset=0):
+    # 获取时间戳，offset为偏移天数
     curTime = time.time() + offset * 24 * 60 * 60
     curTime = time.localtime(curTime)
     curTime = time.strftime(time_format, curTime)
     return curTime
 
+
 # 组合邮件内容
-
-
 @new_thread
 def send_email(
     Subject,
@@ -248,7 +261,7 @@ def send_mail_http(Subject, content, tomail):
     try:
         resp = requests.post(url=server_url, data=postdata,
                              verify=False).content.decode('utf-8')
-        loguru.logger.info("邮件发送成功"+resp)
+        loguru.logger.info("邮件发送成功 to "+tomail+':'+resp)
         return True
     except Exception as e:
         loguru.logger.error("邮件发送失败"+str(e))
@@ -257,7 +270,6 @@ def send_mail_http(Subject, content, tomail):
 # 发送邮件
 
 
-@new_thread
 def send_mail(
     message, smtp_host, smtp_port, user=None, passwd=None, security=None
 ):  # 发送邮件
@@ -302,18 +314,20 @@ def send_mail(
 
 
 def ocr_get_txt_pos(path="", text=""):
-    """
+    '''
     获取文字与位置对应map
     :param path:图片路径，图片路径为空则默认获取当前屏幕截图
     :param text: 筛选需要查找的内容，匹配所有位置
     :return:list
-    """
+    '''
 
-    result, img_path = ocr_img_text(path, saveimg=True)
+    result, img_path, image, fs = ocr_img_text(path, saveimg=True)
 
-    # print("图片识别结果保存：", img_path)
-    textPad_insert("图片识别结果保存："+img_path)
-    poslist = [detection[0][0] for line in result for detection in line]
+    print("图片识别结果保存：", img_path)
+
+    # 把结果列表的两个值分别再存为两个list
+    poslist = [detection[0][0]
+               for line in result for detection in line]  # 取top一个点的位置
     txtlist = [detection[1][0] for line in result for detection in line]
 
     # 用list存文字与位置信息
@@ -332,6 +346,7 @@ def ocr_get_txt_pos(path="", text=""):
     print(find_txt_pos)
     return find_txt_pos
 
+
 # 图像文字识别
 
 
@@ -349,12 +364,12 @@ def ocr_img_text(
 
     # 图片路径为空就默认获取屏幕截图
     if image == "":
-        image = screenshot(w_title=window_title)
-        image = numpy.array(image)
+        image, fullscreen = screenshot(w_title=window_title)
+
     else:
         # 不为空就打开
         image = Image.open(image).convert("RGB")
-
+    image = numpy.array(image)
     # need to run only once to download and load model into memory
     if engine == "paddle":
         ocr = paddleocr.PaddleOCR(
@@ -367,7 +382,6 @@ def ocr_img_text(
                     print(word)
     elif engine == "easyocr":
         # need to run only once to download and load model into memory
-        # need to run only once to load model into memory
         # ocr = easyocr.Reader(['ch_sim', 'en'], gpu=False)  # need to run only once to load model into memory
         ocr = easyocr.Reader(["ch_sim", "en"])
         result = ocr.readtext(image, detail=conf_detail)
@@ -431,7 +445,7 @@ def ocr_img_text(
         im_show = Image.fromarray(im_show)
         im_show.save(filepath+"\\"+img_name)
 
-    return result, img_name, image
+    return result, img_name, image, fullscreen
 
 # 截图
 
@@ -503,7 +517,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                 screenshot.save(filepath+"\\"+screenshot_filename)
                 print("Screenshot of the window saved as " +
                       filepath+"\\"+screenshot_filename)
-            return screenshot
+            return screenshot, fullscreen
     else:
         pass
     if fullscreen != "no":
@@ -515,7 +529,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
             im.save(filepath+"\\"+screenshot_filename)
             print("Screenshot fullscreen saved as " +
                   filepath+"\\"+screenshot_filename)
-        return im
+        return im, fullscreen
 
 # 检查IP是否变化
 
@@ -641,12 +655,75 @@ def click_unread_msg(pos):
     # pyautogui.click(100, 150, button='left')
     # pyautogui.click('屏幕区块.png')
     pass
+
+
+def split_string(s):
+    # 匹配连续的字母/数字/下划线 (词) 或单个非空白字符 (字)
+    # [a-zA-Z0-9_]+ : 连续英文字母、数字、下划线
+    # | : 或
+    # \S : 单个非空白字符 (包括中文、标点等)
+    return re.findall(r'[a-zA-Z0-9_]+|\S', s)
 # 检查屏幕内容
 
 
-@new_thread
+def click_in_window(x, y, key="left"):
+    """点击当前活动窗口内的相对坐标位置 (包括标题栏)"""
+    # 获取当前活动窗口
+    active_win = pyautogui.getActiveWindow()
+
+    if active_win is None:
+        print("未检测到活动窗口！")
+        return
+
+    print(
+        f"活动窗口信息: {active_win.title} | 大小: {active_win.size} | 位置: {active_win.topleft}")
+
+    # 计算绝对坐标 (窗口位置 + 相对位置)
+    absolute_x = active_win.left + x
+    absolute_y = active_win.top + y
+
+    print(f"转换后的屏幕坐标: ({absolute_x}, {absolute_y})", key)
+
+    # 移动并点击
+    pyautogui.click(absolute_x, absolute_y, button=key)  # 使用指定的鼠标按键进行点击
+    print(f"已点击窗口位置 ({x}, {y})")
+    
+def compress_image(img, target_width=1280, target_height=800, quality=85):
+    """
+    压缩图像分辨率到目标尺寸以内（保持宽高比）
+    
+    参数:
+        input_path (str): 输入图像路径
+        output_path (str): 输出图像路径
+        target_width (int): 目标最大宽度（默认1280）
+        target_height (int): 目标最大高度（默认800）
+        quality (int): 输出图像质量（仅对JPEG有效，1-100，默认85）
+    """
+    # 获取原始尺寸
+    original_width, original_height = img.size
+    if original_width <= target_width and original_height <= target_height:
+        # 如果原始图像已经小于目标尺寸，则不需要缩放
+        return img
+    else:
+        # 计算宽度和高度方向的缩放比例（取较小值以保持比例）
+        width_ratio = target_width / original_width
+        height_ratio = target_height / original_height
+        scale_ratio = min(width_ratio, height_ratio)
+        
+        # 计算新尺寸（整数）
+        new_width = int(original_width * scale_ratio)
+        new_height = int(original_height * scale_ratio)
+        
+        # 调整图像大小（使用高质量插值）
+        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # 保存图像（根据格式调整参数，JPEG使用quality，PNG可忽略）
+        return resized_img
+
 def check_screen():
+    # print(auto_reply_text)
     global alert_msg, alert_words, alert_mp3_file, wxmsg_touser, last_sent_seprate
+    pos_to_mid = [0, 0]
     if send_snapshot == True:
         send_image = True
         send_image_file = False
@@ -662,7 +739,7 @@ def check_screen():
     alert_found = False
     print("WatchDog Checking At ", get_curtime())
     textPad_insert("WatchDog Checking At "+get_curtime())
-    ocr_resp, img_filename, image = ocr_img_text(
+    ocr_resp, img_filename, image, fullscreen = ocr_img_text(
         saveimg=False, printResult=False, conf_detail=ocr_detail, engine=ocr_method
     )
     if ocr_method == "tesseract":
@@ -675,28 +752,139 @@ def check_screen():
 
         else:
             ocr_resp_tes = ocr_resp
-
+        print(ocr_resp)
         for line in ocr_resp_tes.split("\n"):
             # print(line)
             for alert_word in alert_words:
                 if alert_word in line:
+                    detect_list = split_string(alert_word)
+                    for word in detect_list:
+                        pos_index = get_index_of_list(ocr_resp["text"], word)
+                        if word != alert_word:
+                            for index in pos_index:
+                                if index != -1:
+                                    if ocr_resp['text'][index+1] in detect_list:
+                                        # 找到关键词坐标
+                                        pos_detected = True
+                                        pos_to_mid = [
+                                            (ocr_resp["left"][index] +
+                                             ocr_resp["left"][index+1])/2,
+                                            (ocr_resp["top"][index] +
+                                             ocr_resp["top"][index+1])/2
+                                        ]
+                        else:
+                            pos_detected = True
+                            index = pos_index[0]
+                            pos_to_mid = [ocr_resp["left"][index] + ocr_resp["width"][index]/2,
+                                          ocr_resp["top"][index] + ocr_resp["height"][index]/2]
+                        if pos_detected:
+                            # 检查是否有深色像素
+                            pixel_dark_count = 0
+                            roi = image[int(ocr_resp["top"][index]):int(ocr_resp["top"][index]+ocr_resp["height"][index]), int(
+                                ocr_resp["left"][index]):int(ocr_resp["left"][index]+ocr_resp["width"][index])]
+                            '''
+                            for row in roi:
+                                for pixel in row:
+                                    # 现在pixel是一个一维数组（三个元素）
+                                    if (pixel > 80).any():
+                                        continue
+                                    else:
+                                        pixel_dark_count += 1
+
+                                        if pixel_dark_count > 20:
+                                            print("Alert Word Found: ", word, " at position: ",
+                                                pos_to_mid, " with dark pixel: ", pixel)
+                                            textPad_insert(
+                                                "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
+                                            alert_found = True
+                                            break
+                            '''
+                            # 判断每个像素是否所有通道都<=80
+                            # 得到二维布尔数组，每个元素表示该像素是否所有通道<=80
+                            dark_pixels = (roi <= 80).all(axis=2)
+                            pixel_dark_count = dark_pixels.sum()
+                            if pixel_dark_count > 20:
+                                alert_found = True
+                                print("Alert Word Found: ", word, " at position: ",
+                                      pos_to_mid, " with dark pixel count: ", pixel_dark_count)
+                                textPad_insert(
+                                    "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
+                    '''
                     alert_found = True
                     break
+                    '''
+                if alert_found == True:
+                    if word in alert_msg:
+                        alert_found = False
+                        print("Same Msg sent already, skip")
+                        continue
+                    else:
+                        word = line
+                        break
             if alert_found == True:
-                word = line
                 break
     else:
         for line in ocr_resp:
-            if line == [] or line == "":
+            if line == [] or line == "" or line == None:
                 continue
             if ocr_method == "paddle":
-                for word in line:
-                    word = word[1][0]
+                for words in line:
+                    word = words[1][0]
+                    word = word.replace(" ", "")  # 去除空格
                     for alert_word in alert_words:
                         if alert_word in word:
+                            # print("Alert Word Found: ", word)
+                            pos_to_mid = [
+                                (words[0][0][0]+words[0][1][0])/2, (words[0][0][1]+words[0][2][1])/2]
+                            # 检查是否有深色像素
+                            square = [words[0][0][0], words[0][0][1], words[0][2]
+                                      [0]-words[0][0][0], words[0][2][1]-words[0][0][1]]
+                            # print("Square: ", square)
+                            # print(image)
+                            pixel_dark_count = 0
+                            roi = image[int(square[1]):int(
+                                square[1]+square[3]), int(square[0]):int(square[0]+square[2])]
+                            '''
+                            for row in roi:
+                                for pixel in row:
+                                    # 现在pixel是一个一维数组（三个元素）
+                                    if (pixel > 80).any():
+                                        continue
+                                    else:
+                                        pixel_dark_count += 1
+
+                                        if pixel_dark_count > 20:
+                                            print("Alert Word Found: ", word, " at position: ",
+                                                pos_to_mid, " with dark pixel: ", pixel)
+                                            textPad_insert(
+                                                "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
+                                            alert_found = True
+                                            break
+                            '''
+                            # 判断每个像素是否所有通道都<=80
+                            # 得到二维布尔数组，每个元素表示该像素是否所有通道<=80
+                            dark_pixels = (roi <= 80).all(axis=2)
+                            pixel_dark_count = dark_pixels.sum()
+                            if pixel_dark_count > 20:
+                                alert_found = True
+                                print("Alert Word Found: ", word, " at position: ",
+                                      pos_to_mid, " with dark pixel count: ", pixel_dark_count)
+                                textPad_insert(
+                                    "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
+                            '''
+                            print("Alert Word Found: ", word, " at position: ", pos_to_mid)
                             alert_found = True
                             break
+                            '''
+                        if alert_found == True:
+                            if word in alert_msg:
+                                alert_found = False
+                                print("Same Msg sent already, skip")
+                                continue
+                            else:
+                                break
                     if alert_found == True:
+
                         break
             elif ocr_method == "easyocr":
                 if ocr_detail == 1:
@@ -708,11 +896,14 @@ def check_screen():
                         alert_found = True
                         break
             if alert_found == True:
+                if word in alert_msg:
+                    continue
                 break
     if ocr_detail == 1 or ocr_method == "paddle":
         # 检查未读消息
+        pos = None
         pos = check_unread_msg(image, ocr_resp)
-        if pos != False:
+        if pos != False and pos != None:
             try:
                 click_unread_msg(pos)
             except Exception as e:
@@ -731,10 +922,49 @@ def check_screen():
             # requests.get(url="http://pi.tzxy.cn/pi/app/wxadminsiteerr.asp?content="+word, verify=False)
             alert_msg.append(word)
             contents = word
+            if auto_reply == True and pos_to_mid != [0, 0]:
+                print('position x y to click: ', pos_to_mid)
+                # '''
+                if fullscreen == "yes":
+                    pyautogui.click(
+                        pos_to_mid[0], pos_to_mid[1], button="right")  # 右键点击
+
+                    time.sleep(1)
+                    pyautogui.click(
+                        # 左键点击
+                        pos_to_mid[0]+50, pos_to_mid[1]+50, button="left")
+                else:
+                    # 点击当前活动窗口内的相对坐标位置
+                    click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
+                    time.sleep(1)
+                    # 点击当前活动窗口内的相对坐标位置
+                    click_in_window(pos_to_mid[0]+50, pos_to_mid[1]+50, "left")
+                # '''
+                time.sleep(0.5)
+                # '''
+                try:
+                    # 查找图片位置
+                    location = pyautogui.locateOnScreen(
+                        'toolbar.png', confidence=0.8)  # 查找按钮图标
+                    if location:
+                        print('图片位置:', location)
+                        pyautogui.click(
+                            # 点击输入框
+                            location[0], location[1]+80, button="left")
+
+                    else:
+                        print('未找到图片')
+                except pyautogui.ImageNotFoundException:
+                    print('未找到图片')
+                time.sleep(0.5)
+                keyboard.write(auto_reply_text)  # 输入自动回复内容
+                pyautogui.press('enter')
+                time.sleep(0.5)
             if send_image == True:
                 import io
                 output = io.BytesIO()
                 image = Image.fromarray(image)
+                image=compress_image(image, target_width=1280, target_height=800, quality=85)
                 image.save(output, format='JPEG')
                 image_data = output.getvalue()
 
@@ -760,6 +990,7 @@ def check_screen():
 
             if conf_wxmsg:
                 wxmsg(wxmsg_touser, contents)
+
             if conf_email:
                 send_email(
                     "ALERTonScreen",
@@ -772,10 +1003,10 @@ def check_screen():
                     sender_email,
                     smtptype,
                 )
-            if conf_serial:
+            if conf_serial and send_seprate == False:
                 serial_send("email", contents)
 
-            if send_seprate == True: # 根据联系人组分组发送消息
+            if send_seprate == True:  # 根据联系人组分组发送消息
                 if last_sent_seprate != contents:
                     send_sep(ocr_method, ocr_resp, contents)
                     last_sent_seprate = contents
@@ -785,7 +1016,7 @@ def check_screen():
 
 @new_thread
 def send_sep(ocr, data, contents=""):
-    global contacts
+    global contacts, msg_group
     group_sent = []
     to_email = ""
     to_wx = ""
@@ -813,6 +1044,29 @@ def send_sep(ocr, data, contents=""):
             if ocr_method == "paddle":
                 for word in line:
                     word = word[1][0]
+                    # add 20250627
+                    # 细分关键字分组发送
+                    # TODO
+                    for key in msg_group:
+                        for k in msg_group[key]:
+                            if k in word:
+                                group = key
+                                if group in group_sent:
+                                    continue
+                                group_sent.append(group)
+                                if to_email == "":
+                                    to_email = contacts[group][0].strip()
+                                else:
+                                    to_email = to_email+"," + \
+                                        contacts[group][0].strip()
+                                if to_wx == "":
+                                    to_wx = contacts[group][1].strip().replace(
+                                        ",", "|")
+                                else:
+                                    to_wx = to_wx+"|" + \
+                                        contacts[group][1].strip().replace(
+                                            ",", "|")
+                    # 关键词分别发送对应联系人
                     for alert_word in alert_words:
                         if alert_word in word:
                             group = alert_groups[alert_word]
@@ -863,12 +1117,12 @@ def send_sep(ocr, data, contents=""):
                        smtp_port, mail_user, mail_pass, sender_email, smtptype)
         else:
             print("No Email Address Found")
-    elif conf_wxmsg:
+    if conf_wxmsg:
         if to_wx != "":
             wxmsg(to_wx, contents)
         else:
             print("No Wxmsg Address")
-    elif conf_serial:
+    if conf_serial:
 
         content_b64 = base64.b64encode(contents.encode()).decode()
         trans_data = {
@@ -878,17 +1132,16 @@ def send_sep(ocr, data, contents=""):
         trans_data = str(trans_data)
         trans_data_b64 = base64.b64encode(trans_data.encode()).decode()
         serial_send("emb64", trans_data_b64)
-    else:
-        pass
+
 
 # 发送微信消息
 
-import urllib
+
 @new_thread
 def wxmsg(touser, content):
     global secret_seed, wxmsg_url, wxmsg_method
     wechatdata = "touser=" + touser
-    content=urllib.parse.quote(content,encoding='utf-8')
+    content = urllib.parse.quote(content, encoding='utf-8')
     wechatdata = wechatdata + "&cont=[" + content + "]hvv-lx-msg"
 
     secret = hashlib.md5(
@@ -904,23 +1157,22 @@ def wxmsg(touser, content):
         loguru.logger.error("微信消息发送失败" + str(e))
     pass
 
-# 读取配置文件-关键词
-
 
 def load_alert_words():
+    # 读取配置文件-关键词
     global alert_words, alert_groups
     alert_words = []
     alert_groups = {}
-    if os.path.exists("alert_words.txt") == False:
-        with open("alert_words.txt", "w", encoding="utf-8") as f:
+    if os.path.exists(ALERT_WORDS_FILE) == False:
+        with open(ALERT_WORDS_FILE, "w", encoding="utf-8") as f:
             print(
-                "alert_words.txt not found, creating a new one,pls add alert words in it"
+                f"{ALERT_WORDS_FILE} not found, creating a new one,pls add alert words in it"
             )
             textPad_insert(
-                "alert_words.txt not found, creating a new one,pls add alert words in it")
+                f"{ALERT_WORDS_FILE} not found, creating a new one,pls add alert words in it")
             f.write(
                 "# 监视-关键词1|联系人组名1\n监视-关键词2|联系人组名1\n监视-关键词3|联系人组名2\n监视-关键词4|联系人组名2\n")
-    with open("alert_words.txt", "r", encoding="utf-8") as f:
+    with open(ALERT_WORDS_FILE, "r", encoding="utf-8") as f:
         words = f.readlines()
         # alert_words = [x.strip().split("|")[0] for x in words]
         for x in words:
@@ -933,18 +1185,17 @@ def load_alert_words():
     print("监视关键字：", alert_words)
     return alert_words, alert_groups
 
-# 读取配置文件-联系人
-
 
 def load_contacts():
+    # 读取配置文件-联系人
     data = {}
-    if os.path.exists("contacts.txt") == False:
-        with open("contacts.txt", "w", encoding="utf-8") as f:
+    if os.path.exists(CONTACT_FILE) == False:
+        with open(CONTACT_FILE, "w", encoding="utf-8") as f:
             print(
-                "contacts.txt not found, creating a new one,pls add email and wxmsg contacts in it"
+                f"{CONTACT_FILE} not found, creating a new one,pls add email and wxmsg contacts in it"
             )
             f.write("# 联系人组名1|邮箱1,邮箱2|微信1,微信2\n# 联系人组名2|邮箱1,邮箱2|微信1,微信2\n")
-    with open("contacts.txt", "r", encoding="utf-8") as f:
+    with open(CONTACT_FILE, "r", encoding="utf-8") as f:
         contacts = f.readlines()
         for item in contacts:
             if item.strip() == "":
@@ -957,6 +1208,51 @@ def load_contacts():
             data[corpname] = [email_receivers, wxmsg_touser]
         print("联系人分组：", data)
         return data
+
+
+def load_msg_groups():
+    # 读取配置文件-消息分组
+    global msg_group
+    msg_group = {}
+    if os.path.exists(MSG_GROUP_FILE) == False:
+        with open(MSG_GROUP_FILE, "w", encoding="utf-8") as f:
+            print(
+                f"{MSG_GROUP_FILE} not found, creating a new one,pls add keywords and groups in it"
+            )
+            f.write("# 关键字|分组\n")
+    with open(MSG_GROUP_FILE, "r", encoding="utf-8") as f:
+        contacts = f.readlines()
+        for item in contacts:
+            if item.strip() == "":
+                continue
+            if item.strip().startswith("#"):
+                continue
+            keyword = item.strip().split(",")[0]
+            group_name = item.strip().split(",")[1]
+            ip_start = keyword.split("/")[0]
+            # print(keyword)
+            net_mask = keyword.split("/")[1]
+            if group_name not in msg_group:
+                msg_group[group_name] = []
+            if net_mask == "":
+                net_mask = "32"
+            if net_mask == "32":
+                if ip_start not in msg_group[group_name]:
+                    msg_group[group_name].append(ip_start)
+            elif net_mask == "16":
+                msg_group[group_name].append(ip_start.split(
+                    ".")[0]+"."+ip_start.split(".")[1]+".")
+            elif net_mask == "8":
+                msg_group[group_name].append(ip_start.split(".")[0]+".")
+            elif int(net_mask) > 16 and int(net_mask) < 25:
+                for i in range(0, 2**(24-int(net_mask))):
+                    msg_group[group_name].append(ip_start.split(
+                        ".")[0]+"."+ip_start.split(".")[1]+"."+str(int(ip_start.split(".")[2])+i)+".")
+            else:
+                msg_group[group_name].append(ip_start)
+
+        print("关键字分组：", msg_group)
+        return msg_group
 
 
 def check_uart_port():
@@ -1029,6 +1325,7 @@ def serial_send(type, temp_data):
 
 @new_thread
 def serial_daemon():
+    
     from queue import Queue
     global serial_queue
     serial_queue = Queue()
@@ -1042,7 +1339,7 @@ def serial_daemon():
 
 
 def serial_send_device(type, temp_data):
-
+    global serial_opened
     # 扫描端口
     # result = check_uart_port()
     result = True
@@ -1054,7 +1351,7 @@ def serial_send_device(type, temp_data):
     bps = int(serialdev.split(',')[1])
     timeout = int(serialdev.split(',')[2])
 
-    serial_opened = False
+    
     while serial_opened == False:
         try:
             uart1 = open_uart(port, bps, timeout)
@@ -1148,7 +1445,8 @@ def serial_send_device(type, temp_data):
         print("Serial send len: ", len, ";data:", txbuf)
         time.sleep(0.001)
     pass
-
+    close_uart(uart1)
+    serial_opened = False
 # 准备配置文件
 
 
@@ -1166,11 +1464,12 @@ def prepare_conf_file(configpath):  # 准备配置文件
         config.set("config", "window_title", r"xxxx")
         config.set("config", "send_snapshot", r"1")
         config.set("config", "alert_words", r"alert_words.txt")
-        config.set("config", "contacts", r"contacts.txt")
+        config.set("config", "contacts", r"conf_contacts.txt")
         config.set("config", "send_seprate", r"1")
+        config.set("config", "send_seprate_group", r"conf_msg_group.txt")
         # config.set("config", "daemon_permit", r"1")
         config.set("config", "daemon_interval", r"5")
-        config.set("config", "auto_reply", r"1") #
+        config.set("config", "auto_reply", r"1")
         config.set("config", "auto_reply_text", r"5")
 
         config.add_section("Email")
@@ -1218,7 +1517,8 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
         "window_title": "xxxx",
         "send_snapshot": "1",
         "alert_words": "alert_words.txt",
-        "contacts": "contacts.txt",
+        "contacts": "conf_contacts.txt",
+        "send_seprate_group": r"conf_msg_group.txt",
         "send_seprate": "1",
         "auto_reply": "1",
         "auto_reply_text": "收到，立即处置",
@@ -1277,31 +1577,57 @@ def daemon_worker():
         schedule.run_pending()
         time.sleep(1)
 
-# 退出程序
-
 
 def quit_program():
-    import sys
-    global app_run
-    app_run = False
-    root.destroy()  # 结束Tk事件循环
-    with open("img_md5_list.txt", "w", encoding="utf-8") as f:
-        for item in img_md5_list:
-            f.write(item+"\n")
+    global icon, app_run
+
+    # 确保只执行一次退出操作
+    if not hasattr(quit_program, "called"):
+        quit_program.called = True
+    else:
+        return
+
+    exit_flag.set()  # 设置全局事件，通知线程退出
+    app_run = False   # 停止主循环
+
+    # 先停止托盘图标
+    if icon is not None:
+        try:
+            icon.stop()
+        except:
+            pass
+        icon = None
+
+    # 保存数据
+    try:
+        with open("img_md5_list.txt", "w", encoding="utf-8") as f:
+            for item in img_md5_list:
+                f.write(item+"\n")
+    except:
+        pass
+
+    # 尝试显示控制台
     try:
         w_console.show()  # 显示控制台
         w_console.restore()  # 恢复窗口
+    except:
+        pass
+
+    # 关闭tkinter主窗口
+    try:
+        if root and root.winfo_exists():
+            root.destroy()
+    except:
+        pass
+
+    try:
+        os._exit(0)
     except:
         pass
     try:
         sys.exit(0)
     except:
         pass
-    try:
-        os._exit(0)
-    except:
-        pass
-
 # 闪屏
 
 
@@ -1372,7 +1698,125 @@ def splash_play():
     splash.mainloop()
 
 
+def get_resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+
+@new_thread
+def systray(icon):
+    icon.run()
+
+
+def sw_console():
+    global settings_window, sw_show
+
+    if not settings_window or not tk._default_root or not settings_window.winfo_exists():
+        # 窗口不存在则创建
+        settings_window = open_settings()
+        sw_show = True  # 创建后显示
+    else:
+        if sw_show:
+            # 当前显示则隐藏
+            settings_window.withdraw()
+            sw_show = False
+        else:
+            # 当前隐藏则显示
+            settings_window.deiconify()
+            settings_window.focus_force()
+            sw_show = True
+# 修改3: 让open_settings返回创建的窗口
+
+
+def open_settings():
+    """显示设置窗口"""
+    global settings_window, sw_show, textPad
+
+    # 如果窗口已经存在，则直接显示
+    if settings_window and settings_window.winfo_exists():
+        settings_window.deiconify()
+        settings_window.focus_force()
+        sw_show = True
+        return settings_window
+
+    # 创建新窗口
+    settings_window = tk.Toplevel(root)
+    settings_window.title("程序设置")
+    settings_window.geometry("300x200")
+    # 修改4: 窗口关闭时隐藏而非销毁
+    settings_window.protocol("WM_DELETE_WINDOW", lambda: sw_console())
+
+    settings_window.iconbitmap(get_resource_path("reload.gif"))  # 设置窗口图标
+    screenWidth = settings_window.winfo_screenwidth()  # 获取显示区域的宽度
+    screenHeight = settings_window.winfo_screenheight()  # 获取显示区域的高度
+    width = 500  # 设定窗口宽度
+    height = 400  # 设定窗口高度
+    left = (screenWidth - width-50)
+    top = (screenHeight - height-150)
+
+    # 宽度x高度+x偏移+y偏移
+    settings_window.geometry("%dx%d+%d+%d" % (width, height, left, top))
+
+    settings_window.title(prog_window_title)
+    # settings_window.protocol("WM_DELETE_WINDOW", quit_program)
+    tk.Label(settings_window, text=VERSION_TEXT).pack()
+    textPad = tk.Text(settings_window, undo=True)
+    textPad.pack(expand=tk.YES, fill=tk.BOTH)
+    scroll = tk.Scrollbar(textPad)
+    textPad.config(yscrollcommand=scroll.set)
+    scroll.config(command=textPad.yview)
+    scroll.pack(side=tk.RIGHT, fill=tk.Y)
+    bt1 = tk.Button(settings_window, text="启动监视!",
+                    command=lambda: set_daemon_permit("on")).pack(side=tk.LEFT)
+    bt2 = tk.Button(settings_window, text="消音!", command=lambda: set_alert_permit(
+        "off")).pack(side=tk.LEFT)
+    bt3 = tk.Button(settings_window, text="停止监视!", command=lambda: set_daemon_permit(
+        "off")).pack(side=tk.LEFT)
+    bt4 = tk.Button(settings_window, text="退出程序!",
+                    command=quit_program).pack(side=tk.LEFT)
+
+    settings_window.attributes('-topmost', True)
+    settings_window.after_idle(settings_window.attributes, '-topmost', False)
+    sw_show = True  # 新创建窗口时设为显示状态
+
+    return settings_window  # 返回创建的窗口
+
+
+def process_queue():
+    """处理来自其他线程的UI请求"""
+    try:
+        while not ui_queue.empty():
+            command, data = ui_queue.get_nowait()
+
+            if command == "show_message":
+                tk.messagebox.showinfo("信息", "这是一个使用pystray和tkinter的示例程序")
+
+            elif command == "exit_app":
+                exit_flag.set()
+                root.quit()  # 退出主事件循环
+
+            # 修改6: 直接调用sw_console而不是open_settings
+            elif command == "open_settings":
+                sw_console()
+
+    except queue.Empty:
+        pass
+
+    # 每100ms检查一次队列
+    root.after(100, process_queue)
+
+
 if __name__ == "__main__":
+    # 读取配置文件-关键词分组
+    msg_group = load_msg_groups()
+
+    # 全局事件，用于通知线程退出
+    exit_flag = threading.Event()
+    # 事件队列
+    ui_queue = queue.Queue()
+
+    icon, textPad = '', ''
     try:
         w_title = "Screen OCR Watchdog"  # 控制台窗口标题 通过 title 命令在bat文件中设置
         w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
@@ -1410,7 +1854,7 @@ if __name__ == "__main__":
     # 定义文件路径
     configpath = r".\setup.ini"
     prepare_conf_file(configpath)
-    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, window_title, conf_serial, send_snapshot, send_seprate,auto_reply,auto_reply_text = (
+    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, window_title, conf_serial, send_snapshot, send_seprate, auto_reply, auto_reply_text = (
         get_conf_from_file(
             configpath,
             "config",
@@ -1450,8 +1894,10 @@ if __name__ == "__main__":
         conf_serial = True
     else:
         conf_serial = False
-    if args.UseSerial == "no":  # 是否启用串口发送功能
-        conf_serial = False
+        if args.UseSerial == "no":  # 是否启用串口发送功能
+            conf_serial = False
+        else:
+            conf_serial = True
     if send_snapshot == "1":  # 是否发送截图
         send_snapshot = True
     else:
@@ -1460,6 +1906,10 @@ if __name__ == "__main__":
         send_seprate = True
     else:
         send_seprate = False
+    if auto_reply == "1":  # 是否自动回复
+        auto_reply = True
+    else:
+        auto_reply = False
     if conf_email == True:
         (
             email_receivers,
@@ -1513,6 +1963,9 @@ if __name__ == "__main__":
         import xmodem
         serialdev = get_conf_from_file(
             configpath, 'serial', ['serialdev_in'])
+        
+        serial_opened = False
+        
     alert_words, alert_groups = load_alert_words()
 
     contacts = load_contacts()
@@ -1520,11 +1973,11 @@ if __name__ == "__main__":
     alert_permit = False
     daemon_permit = False
 
-    schedule.every(20).seconds.do(check_screen)  # 每10秒执行一次
-    schedule.every(240).seconds.do(clean_msg_store)  # 每240秒执行一次
-    schedule.every(120).seconds.do(load_alert_words)  # 每120秒执行一次
-    schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次
-    schedule.every(3).seconds.do(run_play_music)  # 每3秒执行一次
+    schedule.every(20).seconds.do(check_screen)  # 每10秒执行一次，检查屏幕
+    schedule.every(60*20).seconds.do(clean_msg_store)  # 每20分执行一次，清除消息存储
+    schedule.every(120).seconds.do(load_alert_words)  # 每120秒执行一次，加载关键词
+    schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次，加载联系人
+    schedule.every(3).seconds.do(run_play_music)  # 每3秒执行一次，播放报警音
 
     serial_daemon()
     daemon_worker()
@@ -1533,37 +1986,43 @@ if __name__ == "__main__":
         splash.quit()
     except:
         pass
+
+    menu_options = pystray.Menu(
+        pystray.MenuItem("启动监视!", lambda: set_daemon_permit("on")),
+        pystray.MenuItem("停止监视!", lambda: set_daemon_permit("off")),
+        pystray.MenuItem("消音!", lambda: set_alert_permit("off")),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("控制台", sw_console),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("退出", quit_program)
+    )
+    icon = pystray.Icon(name="桌面关键字监视器", icon=Image.open(
+        get_resource_path("./reload.gif")), menu=menu_options, on_quit=quit_program)
+
+    systray(icon)
+    """创建隐藏的tkinter主窗口"""
     root = tk.Tk()
-    screenWidth = root.winfo_screenwidth()  # 获取显示区域的宽度
-    screenHeight = root.winfo_screenheight()  # 获取显示区域的高度
-    width = 500  # 设定窗口宽度
-    height = 400  # 设定窗口高度
-    left = (screenWidth - width-50)
-    top = (screenHeight - height-150)
+    root.withdraw()  # 隐藏主窗口
 
-    # 宽度x高度+x偏移+y偏移
-    # 在设定宽度和高度的基础上指定窗口相对于屏幕左上角的偏移位置
-    root.geometry("%dx%d+%d+%d" % (width, height, left, top))
-    # root.geometry('500x300')
+    # 修改1: 定义全局状态变量
+    settings_window = None
+    sw_show = False  # False表示隐藏，True表示显示
+    sw_console()  # 确保设置窗口在主循环结束后仍然可用
+    sw_console()  # 确保设置窗口在主循环结束后仍然可用
 
-    root.title(prog_window_title)
-    root.protocol("WM_DELETE_WINDOW", quit_program)
-    tk.Label(root, text="ProG By CrazYan 202408").pack()
-    textPad = tk.Text(root, undo=True)
-    textPad.pack(expand=tk.YES, fill=tk.BOTH)
-    scroll = tk.Scrollbar(textPad)
-    textPad.config(yscrollcommand=scroll.set)
-    scroll.config(command=textPad.yview)
-    scroll.pack(side=tk.RIGHT, fill=tk.Y)
-    bt1 = tk.Button(root, text="启动监视!",
-                    command=lambda: set_daemon_permit("on")).pack(side=tk.LEFT)
-    bt2 = tk.Button(root, text="消音!", command=lambda: set_alert_permit(
-        "off")).pack(side=tk.LEFT)
-    bt3 = tk.Button(root, text="停止监视!", command=lambda: set_daemon_permit(
-        "off")).pack(side=tk.LEFT)
-    bt4 = tk.Button(root, text="退出程序!",
-                    command=quit_program).pack(side=tk.LEFT)
-    root.lift()
-    root.attributes('-topmost', True)
-    root.after_idle(root.attributes, '-topmost', False)
+    # 启动队列处理
+    root.after(100, process_queue)
+
+    # 启动tkinter主事件循环
     root.mainloop()
+
+    # tkinter事件循环退出后，设置退出标志
+    exit_flag.set()
+
+    # 等待退出标志
+    while not exit_flag.is_set():
+        time.sleep(0.1)
+
+    # 显式停止托盘图标
+    if icon and hasattr(icon, 'stop'):
+        icon.stop()
