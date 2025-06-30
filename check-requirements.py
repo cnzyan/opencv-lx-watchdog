@@ -48,6 +48,8 @@ with open('requirements.txt', 'r',encoding=encoding) as f:
     requirements = [x.strip() for x in requirements]
     # print(requirements)
     for i in requirements:
+        if i.startswith('#') or i == '':
+            continue
         if i not in whllist1:
             #print(i)
             #print('not install')

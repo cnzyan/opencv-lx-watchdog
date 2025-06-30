@@ -22,6 +22,7 @@ import tkinter as tk
 import pygetwindow
 import pyautogui
 import pystray
+import random
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -687,11 +688,12 @@ def click_in_window(x, y, key="left"):
     # 移动并点击
     pyautogui.click(absolute_x, absolute_y, button=key)  # 使用指定的鼠标按键进行点击
     print(f"已点击窗口位置 ({x}, {y})")
-    
+
+
 def compress_image(img, target_width=1280, target_height=800, quality=85):
     """
     压缩图像分辨率到目标尺寸以内（保持宽高比）
-    
+
     参数:
         input_path (str): 输入图像路径
         output_path (str): 输出图像路径
@@ -709,16 +711,18 @@ def compress_image(img, target_width=1280, target_height=800, quality=85):
         width_ratio = target_width / original_width
         height_ratio = target_height / original_height
         scale_ratio = min(width_ratio, height_ratio)
-        
+
         # 计算新尺寸（整数）
         new_width = int(original_width * scale_ratio)
         new_height = int(original_height * scale_ratio)
-        
+
         # 调整图像大小（使用高质量插值）
-        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
+        resized_img = img.resize(
+            (new_width, new_height), Image.Resampling.LANCZOS)
+
         # 保存图像（根据格式调整参数，JPEG使用quality，PNG可忽略）
         return resized_img
+
 
 def check_screen():
     # print(auto_reply_text)
@@ -778,8 +782,8 @@ def check_screen():
                             pos_to_mid = [ocr_resp["left"][index] + ocr_resp["width"][index]/2,
                                           ocr_resp["top"][index] + ocr_resp["height"][index]/2]
                         if pos_detected:
-                            # 检查是否有深色像素
-                            pixel_dark_count = 0
+                            # 检查是否有特征像素
+                            pixel_char_count = 0
                             roi = image[int(ocr_resp["top"][index]):int(ocr_resp["top"][index]+ocr_resp["height"][index]), int(
                                 ocr_resp["left"][index]):int(ocr_resp["left"][index]+ocr_resp["width"][index])]
                             '''
@@ -789,9 +793,9 @@ def check_screen():
                                     if (pixel > 80).any():
                                         continue
                                     else:
-                                        pixel_dark_count += 1
+                                        pixel_char_count += 1
 
-                                        if pixel_dark_count > 20:
+                                        if pixel_char_count > 20:
                                             print("Alert Word Found: ", word, " at position: ",
                                                 pos_to_mid, " with dark pixel: ", pixel)
                                             textPad_insert(
@@ -799,14 +803,25 @@ def check_screen():
                                             alert_found = True
                                             break
                             '''
+                            # HDe行 接收 e8e8e9 发送 c9e7ff
+                            # 蓝信 接收FFFFFF 发送 6392ed
                             # 判断每个像素是否所有通道都<=80
                             # 得到二维布尔数组，每个元素表示该像素是否所有通道<=80
-                            dark_pixels = (roi <= 80).all(axis=2)
-                            pixel_dark_count = dark_pixels.sum()
-                            if pixel_dark_count > 20:
+                            if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
+                                char_pixels = (roi <= 80).all(axis=2)
+                                char_num = 20
+                            elif conf_app_name=="e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
+                                char_pixels = (
+                                    roi == 232).all(axis=2)
+                                char_num = 60
+                            else: # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
+                                char_pixels = (roi >=250).all(axis=2)
+                                char_num = 60
+                            pixel_char_count = char_pixels.sum()
+                            if pixel_char_count > char_num:
                                 alert_found = True
                                 print("Alert Word Found: ", word, " at position: ",
-                                      pos_to_mid, " with dark pixel count: ", pixel_dark_count)
+                                      pos_to_mid, " with dark pixel count: ", pixel_char_count)
                                 textPad_insert(
                                     "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
                     '''
@@ -836,12 +851,12 @@ def check_screen():
                             # print("Alert Word Found: ", word)
                             pos_to_mid = [
                                 (words[0][0][0]+words[0][1][0])/2, (words[0][0][1]+words[0][2][1])/2]
-                            # 检查是否有深色像素
+                            # 检查是否有特征像素
                             square = [words[0][0][0], words[0][0][1], words[0][2]
                                       [0]-words[0][0][0], words[0][2][1]-words[0][0][1]]
                             # print("Square: ", square)
                             # print(image)
-                            pixel_dark_count = 0
+                            pixel_char_count = 0
                             roi = image[int(square[1]):int(
                                 square[1]+square[3]), int(square[0]):int(square[0]+square[2])]
                             '''
@@ -851,9 +866,9 @@ def check_screen():
                                     if (pixel > 80).any():
                                         continue
                                     else:
-                                        pixel_dark_count += 1
+                                        pixel_char_count += 1
 
-                                        if pixel_dark_count > 20:
+                                        if pixel_char_count > 20:
                                             print("Alert Word Found: ", word, " at position: ",
                                                 pos_to_mid, " with dark pixel: ", pixel)
                                             textPad_insert(
@@ -861,14 +876,28 @@ def check_screen():
                                             alert_found = True
                                             break
                             '''
+                            # HDe行pc 接收 e8e8e9 发送 c9e7ff
+                            # HDe行android 接收 ffffff 发送 c9e7ff
+                            # 蓝信 接收FFFFFF 发送 6392ed
                             # 判断每个像素是否所有通道都<=80
                             # 得到二维布尔数组，每个元素表示该像素是否所有通道<=80
-                            dark_pixels = (roi <= 80).all(axis=2)
-                            pixel_dark_count = dark_pixels.sum()
-                            if pixel_dark_count > 20:
+                            if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
+                                char_pixels = (roi <= 80).all(axis=2)
+                                char_num = 20
+                            elif conf_app_name=="e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
+
+                                char_pixels = (roi >= 232).all(axis=2)
+                                char_num = 60
+                            else: # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
+                                char_pixels = (roi >=250).all(axis=2)
+                                char_num = 60
+                            pixel_char_count = char_pixels.sum()
+                            textPad_insert(
+                                "Conf App Name: "+conf_app_name+" , pixel_char_count:"+str(pixel_char_count))
+                            if pixel_char_count > char_num:
                                 alert_found = True
                                 print("Alert Word Found: ", word, " at position: ",
-                                      pos_to_mid, " with dark pixel count: ", pixel_dark_count)
+                                      pos_to_mid, " with dark pixel count: ", pixel_char_count)
                                 textPad_insert(
                                     "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
                             '''
@@ -925,46 +954,111 @@ def check_screen():
             if auto_reply == True and pos_to_mid != [0, 0]:
                 print('position x y to click: ', pos_to_mid)
                 # '''
-                if fullscreen == "yes":
-                    pyautogui.click(
-                        pos_to_mid[0], pos_to_mid[1], button="right")  # 右键点击
+                if conf_app_name == "蓝信":  # 蓝信
+                    y_offset = 50
+                elif conf_app_name=="e行PC":  # HDe行
+                    y_offset = 120
 
-                    time.sleep(1)
-                    pyautogui.click(
-                        # 左键点击
-                        pos_to_mid[0]+50, pos_to_mid[1]+50, button="left")
+                if fullscreen == "yes":
+                    if conf_app_name == "蓝信" or conf_app_name=="e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
+                        pyautogui.click(
+                            pos_to_mid[0], pos_to_mid[1], button="right")  # 右键点击关键字文本
+
+                        time.sleep(1)
+
+                        pyautogui.click(
+                            # 左键点击菜单项
+                            pos_to_mid[0]+50, pos_to_mid[1]+y_offset, button="left")
+                    else: # e行安卓，长按弹出菜单
+                        # 移动鼠标到指定位置
+                        pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1])
+                        
+                        # 按下鼠标左键
+                        pyautogui.mouseDown(button='left')
+                        
+                        # 等待一段时间，模拟长按效果
+                        time.sleep(1)  # 例如，长按1秒
+                        
+                        # 释放鼠标左键
+                        pyautogui.mouseUp(button='left')
+                        time.sleep(1)
+                        quota_image='quota_hdex_android.png'
+                        location_q = pyautogui.locateOnScreen(quota_image, confidence=0.8)  # 查找按钮图标
+                        if location_q:
+                            print('图片位置:', location_q)
+                            pyautogui.click(
+                                # 点击输入框
+                                location_q[0], location_q[1], button="left")
                 else:
                     # 点击当前活动窗口内的相对坐标位置
-                    click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
-                    time.sleep(1)
-                    # 点击当前活动窗口内的相对坐标位置
-                    click_in_window(pos_to_mid[0]+50, pos_to_mid[1]+50, "left")
+                    if conf_app_name == "蓝信" or conf_app_name=="e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
+                        click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
+                        time.sleep(1)
+                        # 点击当前活动窗口内的相对坐标位置
+                        click_in_window(
+                            pos_to_mid[0]+50, pos_to_mid[1]+y_offset, "left")
+                    else:  # e行安卓
+                        pass
                 # '''
                 time.sleep(0.5)
                 # '''
+                # 点击输入框，不是必须 ====start
                 try:
                     # 查找图片位置
+                    if conf_app_name == "蓝信":  # 蓝信
+                        toolbar_image = 'toolbar_lx.png'
+                        x_offset=0
+                        y_offset = 80
+                    elif conf_app_name=="e行PC":  # HDe行
+                        toolbar_image = 'toolbar_hdex_pc.png'
+                        x_offset=0
+                        y_offset = 80
+                    else:  # e行安卓
+                        toolbar_image = 'toolbar_hdex_android.png'
+                        x_offset=100
+                        y_offset = 0
                     location = pyautogui.locateOnScreen(
-                        'toolbar.png', confidence=0.8)  # 查找按钮图标
+                        toolbar_image, confidence=0.8)  # 查找按钮图标
                     if location:
                         print('图片位置:', location)
                         pyautogui.click(
                             # 点击输入框
-                            location[0], location[1]+80, button="left")
-
+                            location[0]+x_offset, location[1]+y_offset, button="left")
+                        if conf_app_name == "蓝信":  # 蓝信
+                            pass
+                        elif conf_app_name=="e行PC":  # HDe行
+                            keyboard.press_and_release('down')  # 因引文在文本框上部，靠近toolbar，按下向下键，避免选中引文
+                        else:  # e行安卓
+                            pass
                     else:
                         print('未找到图片')
                 except pyautogui.ImageNotFoundException:
                     print('未找到图片')
+                # 点击输入框，不是必须 ====end
                 time.sleep(0.5)
                 keyboard.write(auto_reply_text)  # 输入自动回复内容
-                pyautogui.press('enter')
+                # 生成随机数
+                wait_time = random.randint(0, 10)+0.5
+                textPad_insert("Wait Time: "+str(wait_time))
+                time.sleep(wait_time)
+                if conf_app_name == "蓝信" or conf_app_name=="e行PC":  # 蓝信/e行PC
+                    pyautogui.press('enter')
+                else:  # e行安卓
+                    send_button_image = 'send_button_hdex_android.png'
+                    location = pyautogui.locateOnScreen(
+                        send_button_image, confidence=0.8)  # 查找按钮图标
+                    if location:
+                        print('图片位置:', location)
+                        pyautogui.click(
+                            # 点击输入框
+                            location[0], location[1], button="left")
                 time.sleep(0.5)
             if send_image == True:
                 import io
                 output = io.BytesIO()
                 image = Image.fromarray(image)
-                image=compress_image(image, target_width=1280, target_height=800, quality=85)
+                image = compress_image(
+                    image, target_width=1280, target_height=800, quality=85)
                 image.save(output, format='JPEG')
                 image_data = output.getvalue()
 
@@ -1325,7 +1419,7 @@ def serial_send(type, temp_data):
 
 @new_thread
 def serial_daemon():
-    
+
     from queue import Queue
     global serial_queue
     serial_queue = Queue()
@@ -1351,7 +1445,6 @@ def serial_send_device(type, temp_data):
     bps = int(serialdev.split(',')[1])
     timeout = int(serialdev.split(',')[2])
 
-    
     while serial_opened == False:
         try:
             uart1 = open_uart(port, bps, timeout)
@@ -1854,7 +1947,7 @@ if __name__ == "__main__":
     # 定义文件路径
     configpath = r".\setup.ini"
     prepare_conf_file(configpath)
-    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, window_title, conf_serial, send_snapshot, send_seprate, auto_reply, auto_reply_text = (
+    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, conf_app_name, window_title, conf_serial, send_snapshot, send_seprate, auto_reply, auto_reply_text = (
         get_conf_from_file(
             configpath,
             "config",
@@ -1864,6 +1957,7 @@ if __name__ == "__main__":
                 "send_email",
                 "ocr_method",
                 "ocr_detail",
+                "app_name",
                 "window_title",
                 "send_serial",
                 "send_snapshot",
@@ -1963,9 +2057,9 @@ if __name__ == "__main__":
         import xmodem
         serialdev = get_conf_from_file(
             configpath, 'serial', ['serialdev_in'])
-        
+
         serial_opened = False
-        
+
     alert_words, alert_groups = load_alert_words()
 
     contacts = load_contacts()
