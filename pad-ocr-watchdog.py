@@ -22,6 +22,7 @@ import tkinter as tk
 from tkinter import ttk
 import pygetwindow
 import pyautogui
+import mouse
 import pystray
 import random
 from email import encoders
@@ -839,7 +840,10 @@ def compress_image(img, target_width=1280, target_height=800, quality=85):
         # 保存图像（根据格式调整参数，JPEG使用quality，PNG可忽略）
         return resized_img
 
-
+def long_press(duration):
+    mouse.press('left')
+    time.sleep(duration)  # 精确控制时长
+    mouse.release('left')
 def check_screen():
     # print(auto_reply_text)
     global alert_msg, alert_words, alert_mp3_file, wxmsg_touser, last_sent_seprate
@@ -1108,15 +1112,21 @@ def check_screen():
                     else:  # e行安卓，长按弹出菜单
                         # 移动鼠标到指定位置
                         pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1]+30)
-
+                        textPad_insert(
+                            '移动鼠标到指定位置:'+str(pos_to_mid[0])+','+str(pos_to_mid[1]+30))
+                        #time.sleep(5)
+                        
+                        if 1==1:  # 旧方法，长按
                         # 按下鼠标左键
-                        pyautogui.mouseDown(button='left')
+                            pyautogui.mouseDown(button='left')
 
-                        # 等待一段时间，模拟长按效果
-                        time.sleep(2)  # 例如，长按1秒
+                            # 等待一段时间，模拟长按效果
+                            time.sleep(2.5)  # 例如，长按2秒
 
-                        # 释放鼠标左键
-                        pyautogui.mouseUp(button='left')
+                            # 释放鼠标左键
+                            pyautogui.mouseUp(button='left')
+                        else:
+                            long_press(2.5)
                         time.sleep(1)
                         quota_image = './resources/image/quota_hdex_android.png'
                         location_q = pyautogui.locateOnScreen(
@@ -1126,7 +1136,8 @@ def check_screen():
                             pyautogui.click(
                                 # 点击输入框
                                 location_q[0], location_q[1], button="left")
-                else:
+                else: # fullscreen == "no" 只对蓝信/e行PC有效
+                    # 在当前活动窗口内点击
                     # 点击当前活动窗口内的相对坐标位置
                     if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
                         click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
@@ -1135,7 +1146,41 @@ def check_screen():
                         click_in_window(
                             pos_to_mid[0]+50, pos_to_mid[1]+y_offset, "left")
                     else:  # e行安卓
-                        pass
+                        active_win = pyautogui.getActiveWindow()
+
+                        if active_win is None:
+                            print("未检测到活动窗口！")
+                            return
+
+                        print(
+                            f"活动窗口信息: {active_win.title} | 大小: {active_win.size} | 位置: {active_win.topleft}")
+
+                        # 计算绝对坐标 (窗口位置 + 相对位置)
+                        absolute_x = active_win.left + pos_to_mid[0]
+                        absolute_y = active_win.top + pos_to_mid[1]
+                        pyautogui.moveTo(absolute_x, absolute_y)
+                        textPad_insert(
+                            '移动鼠标到指定位置:'+str(absolute_x)+','+str(absolute_y))         
+                        if 1==1:  # 旧方法，长按
+                        # 按下鼠标左键
+                            pyautogui.mouseDown(button='left')
+
+                            # 等待一段时间，模拟长按效果
+                            time.sleep(2.5)  # 例如，长按2秒
+
+                            # 释放鼠标左键
+                            pyautogui.mouseUp(button='left')
+                        else:
+                            long_press(2.5)
+                        time.sleep(1)
+                        quota_image = './resources/image/quota_hdex_android.png'
+                        location_q = pyautogui.locateOnScreen(
+                            quota_image, confidence=0.8)  # 查找按钮图标
+                        if location_q:
+                            print('图片位置:', location_q)
+                            pyautogui.click(
+                                # 点击输入框
+                                location_q[0], location_q[1], button="left")
                 # '''
                 time.sleep(0.5)
                 # '''
@@ -1176,20 +1221,26 @@ def check_screen():
                 time.sleep(0.5)
                 keyboard.write(auto_reply_text)  # 输入自动回复内容
                 # 生成随机数
-                wait_time = random.randint(0, 10)+0.5
-                textPad_insert("Wait Time: "+str(wait_time))
-                time.sleep(wait_time)
+                wait_time_random =False # 是否等待随机时间
+                if wait_time_random == True:
+                    wait_time = random.randint(0, 10)+0.5
+                    textPad_insert("Wait Time: "+str(wait_time))
+                    time.sleep(wait_time)
                 if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC
                     pyautogui.press('enter')
                 else:  # e行安卓
                     send_button_image = './resources/image/send_button_hdex_android.png'
-                    location = pyautogui.locateOnScreen(
-                        send_button_image, confidence=0.8)  # 查找按钮图标
-                    if location:
-                        print('图片位置:', location)
-                        pyautogui.click(
-                            # 点击输入框
-                            location[0], location[1], button="left")
+                    try:
+                        location = pyautogui.locateOnScreen(
+                            send_button_image, confidence=0.8)  # 查找按钮图标
+                        if location:
+                            print('图片位置:', location)
+                            pyautogui.click(
+                                # 点击输入框
+                                location[0], location[1], button="left")
+                    except pyautogui.ImageNotFoundException:
+                        print('未找到图片')
+                        textPad_insert('未找到发送按钮图片，可能是屏幕分辨率不匹配，请检查资源图片。')
                 time.sleep(0.5)
             if send_image == True:
                 import io
