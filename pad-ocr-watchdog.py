@@ -248,8 +248,45 @@ def get_curtime(time_format="%Y-%m-%d %H:%M:%S", offset=0):
     return curTime
 
 
-# 组合邮件内容
+def put_email_queue(message,  smtp_host, smtp_port,  mail_user, mail_pass, smtptype):
+    """
+    创建一个邮件队列
+    """
+    delay = 0
+    email_queue.put((message, smtp_host, smtp_port,
+                    mail_user, mail_pass, smtptype, delay))
+
+
 @new_thread
+def process_email_queue(email_queue):
+    loguru.logger.info("邮件队列处理线程已启动")
+    while 1 == 1:
+        if email_queue.empty():
+            # loguru.logger.info("邮件队列为空，等待新任务")
+            time.sleep(1)
+            continue
+        msg, host, port, user, passwd, security, delay = email_queue.get()
+        re_put = False
+        if delay == 0:
+            if send_mail(msg, host, port, user, passwd, security):
+                pass
+            else:
+                delay = 60  # 如果发送失败，延迟60秒重试
+                loguru.logger.error("邮件发送失败，延迟60秒重试")
+                re_put = True
+            time.sleep(0.1)
+        else:
+            time.sleep(1)
+            delay -= 1
+            if delay <= 0:
+                delay = 0
+            loguru.logger.info("邮件发送延迟，等待" + str(delay) + "秒")
+            re_put = True
+        if re_put:
+            email_queue.put((msg, host, port, user, passwd, security, delay))
+# 组合邮件内容
+
+
 def send_email(
     Subject,
     content,
@@ -290,8 +327,9 @@ def send_email(
         message.attach(part1)
 
         # message.attach(picture)
-
+        return put_email_queue(message,  smtp_host, smtp_port,  mail_user, mail_pass, smtptype)
         return send_mail(message, smtp_host, smtp_port, mail_user, mail_pass, smtptype)
+
     else:
         return send_mail_http(Subject, content, tomail)
 
@@ -321,7 +359,6 @@ def AES_ECB_DECRYPT(textBase64, secretKey):
 # 发送邮件-通过HTTP中继服务器
 
 
-@new_thread
 def send_mail_http(Subject, content, tomail):
     secret_seed = server_secret  # 服务器密钥
     secret_today = hashlib.md5(
@@ -2155,7 +2192,7 @@ def get_resource_path(relative_path):
     relative_path = relative_path.replace("/", "\\")
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
-    
+
     return os.path.join(os.path.abspath("."), relative_path)
 
 
@@ -2215,7 +2252,8 @@ def open_settings():
     # 修改4: 窗口关闭时隐藏而非销毁
     settings_window.protocol("WM_DELETE_WINDOW", lambda: sw_console())
 
-    settings_window.iconbitmap(get_resource_path("./resources/image/reload.gif"))  # 设置窗口图标
+    settings_window.iconbitmap(get_resource_path(
+        "./resources/image/reload.gif"))  # 设置窗口图标
     screenWidth = settings_window.winfo_screenwidth()  # 获取显示区域的宽度
     screenHeight = settings_window.winfo_screenheight()  # 获取显示区域的高度
     width = 550  # 设定窗口宽度
@@ -2463,6 +2501,8 @@ if __name__ == "__main__":
                 "server_url",
             ],
         )
+        email_queue = queue.Queue()
+        process_email_queue(email_queue)
     if conf_wxmsg == True:
         micromsg_method, corp_id, corp_secret, agent_id, wxmsg_url_get, wxmsg_url_post, wxmsg_method, secret_seed, wxmsg_touser = (
             get_conf_from_file(
