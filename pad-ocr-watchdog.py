@@ -19,6 +19,7 @@ import base64
 import configparser
 import chardet
 import tkinter as tk
+from tkinter import ttk
 import pygetwindow
 import pyautogui
 import pystray
@@ -42,6 +43,21 @@ VERSION_TEXT = "ProG By CrazYan 202408/upd202506"
 CONTACT_FILE = "conf_contacts.txt"
 ALERT_WORDS_FILE = "conf_alert_words.txt"
 MSG_GROUP_FILE = "conf_msg_groups.txt"
+LOGS_DIR = "logs"
+DEPARTMENT_MAPPING = {
+    "山东": "shandong",
+    "滕州": "tengzhou",
+    "十里泉": "shiliquan",
+    "淄博": "zibo",
+    "潍坊": "weifang",
+    "邹县": "zouxian",
+    "新能源": "xinnengyuan",
+    "莱州": "laizhou",
+    "青岛": "qingdao",
+    "莱城": "laicheng",
+    "章丘": "zhangqiu",
+    "龙口": "longkou"
+}
 
 
 def new_thread1(func):
@@ -65,8 +81,66 @@ def new_thread(fn):
     return wrapper
 
 
+def set_volume(val=50):
+    val = int(float(val))
+    # 设置音量
+    global conf_volume, volume_label
+    if val > 100:
+        val = 100
+    elif val < 0:
+        val = 0
+    # 获取滑块当前值并更新变量和标签
+    if abs(val-conf_volume) < 5:
+        # print("Volume Not Changed, Current Value is ", conf_volume, "%")
+        # textPad_insert("Volume Not Changed, Current Value is "+str(conf_volume)+"%")
+        return
+    conf_volume = val
+    val = str(val)
+    if len(val) == 1:
+        val = "  " + val
+    elif len(val) == 2:
+        val = " " + val
+    volume_label.config(text=f"{val}%")
+    print("Set Volume To ", val, "%")
+    textPad_insert("Set Volume To "+str(val)+"%")
+
+
+def set_daemon_interval(val=20):
+    # 设置监视间隔
+    global daemon_interval, textPad
+    global bt3_1, bt3_2, bt3_3, bt3_4
+    if bt3_1 != None:
+        # 重置按钮颜色
+        bt3_1.config(bg="SystemButtonFace")
+    if bt3_2 != None:
+        # 重置按钮颜色
+        bt3_2.config(bg="SystemButtonFace")
+    if bt3_3 != None:
+        # 重置按钮颜色
+        bt3_3.config(bg="SystemButtonFace")
+    if bt3_4 != None:
+        # 重置按钮颜色
+        bt3_4.config(bg="SystemButtonFace")
+    if val == 5:
+        bt3_1.config(bg="green")
+    elif val == 10:
+        bt3_2.config(bg="green")
+    elif val == 15:
+        bt3_3.config(bg="green")
+    elif val == 20:
+        bt3_4.config(bg="green")
+    if val < 1:
+        val = 1
+    elif val > 60:
+        val = 60
+    daemon_interval = val
+    print("Set Daemon Interval To ", daemon_interval, " seconds")
+    textPad_insert("Set Daemon Interval To "+str(daemon_interval)+" seconds")
+
+
 @new_thread
 def play_music(file_path):
+    global conf_volume
     # 调用播放音频报警函数
     play_method = "pygame"
     if play_method == "ffplay":
@@ -77,6 +151,7 @@ def play_music(file_path):
     elif play_method == "pygame":
         import pygame
         pygame.mixer.init()
+        pygame.mixer.music.set_volume(conf_volume/100)  # 设置音量
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
@@ -101,8 +176,12 @@ def textPad_insert(text):
 def run_play_music():
     # 播放音频报警
     global alert_mp3_file, alert_permit, daemon_permit
+    if 'resources/audio' not in alert_mp3_file:
+        # 如果路径中不包含'resources/audio'，需要添加前缀
+        alert_mp3_file = './resources/audio/' + alert_mp3_file
+    # print("Alert MP3 File: ", alert_mp3_file)
     if os.path.exists(alert_mp3_file) == False:
-        alert_mp3_file = "alert.mp3"
+        alert_mp3_file = "./resources/audio/alert.mp3"
     if alert_permit == True:
         play_music(alert_mp3_file)
     else:
@@ -727,6 +806,7 @@ def compress_image(img, target_width=1280, target_height=800, quality=85):
 def check_screen():
     # print(auto_reply_text)
     global alert_msg, alert_words, alert_mp3_file, wxmsg_touser, last_sent_seprate
+    image_saved = False
     pos_to_mid = [0, 0]
     if send_snapshot == True:
         send_image = True
@@ -810,12 +890,12 @@ def check_screen():
                             if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
                                 char_pixels = (roi <= 80).all(axis=2)
                                 char_num = 20
-                            elif conf_app_name=="e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
+                            elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
                                 char_pixels = (
                                     roi == 232).all(axis=2)
                                 char_num = 60
-                            else: # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
-                                char_pixels = (roi >=250).all(axis=2)
+                            else:  # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
+                                char_pixels = (roi >= 250).all(axis=2)
                                 char_num = 60
                             pixel_char_count = char_pixels.sum()
                             if pixel_char_count > char_num:
@@ -848,6 +928,23 @@ def check_screen():
                     word = word.replace(" ", "")  # 去除空格
                     for alert_word in alert_words:
                         if alert_word in word:
+                            if image_saved == False:
+                                try:
+                                    image_save = Image.fromarray(image)
+                                    image_save = compress_image(
+                                        image_save, target_width=1280, target_height=800, quality=85)
+                                    image_save.save(
+                                        "screenshots\\"+img_filename, format='JPEG')
+                                    image_saved = True
+                                    print("Keyword found,Image saved:" +
+                                          img_filename)
+                                    textPad_insert(
+                                        "Keyword found,Image saved:"+img_filename)
+                                except Exception as e:
+                                    print("Image Compress Failed."+str(e))
+                                    textPad_insert(
+                                        "Image Compress Failed."+str(e))
+
                             # print("Alert Word Found: ", word)
                             pos_to_mid = [
                                 (words[0][0][0]+words[0][1][0])/2, (words[0][0][1]+words[0][2][1])/2]
@@ -884,12 +981,12 @@ def check_screen():
                             if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
                                 char_pixels = (roi <= 80).all(axis=2)
                                 char_num = 20
-                            elif conf_app_name=="e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
+                            elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
 
                                 char_pixels = (roi >= 232).all(axis=2)
                                 char_num = 60
-                            else: # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
-                                char_pixels = (roi >=250).all(axis=2)
+                            else:  # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
+                                char_pixels = (roi >= 250).all(axis=2)
                                 char_num = 60
                             pixel_char_count = char_pixels.sum()
                             textPad_insert(
@@ -931,13 +1028,14 @@ def check_screen():
     if ocr_detail == 1 or ocr_method == "paddle":
         # 检查未读消息
         pos = None
-        pos = check_unread_msg(image, ocr_resp)
-        if pos != False and pos != None:
-            try:
-                click_unread_msg(pos)
-            except Exception as e:
-                print("Mouse Click Error."+str(e))
-                textPad_insert("Mouse Click Error."+str(e))
+        if conf_app_name == "蓝信":  # 蓝信/e行PC
+            pos = check_unread_msg(image, ocr_resp)
+            if pos != False and pos != None:
+                try:
+                    click_unread_msg(pos)
+                except Exception as e:
+                    print("Mouse Click Error."+str(e))
+                    textPad_insert("Mouse Click Error."+str(e))
     if alert_found == True:
         word = word.strip()
         print("ALerT Word FOUND!!!ALLLERRRRRTTTTT", word)
@@ -956,34 +1054,36 @@ def check_screen():
                 # '''
                 if conf_app_name == "蓝信":  # 蓝信
                     y_offset = 50
-                elif conf_app_name=="e行PC":  # HDe行
+                elif conf_app_name == "e行PC":  # HDe行
                     y_offset = 120
 
                 if fullscreen == "yes":
-                    if conf_app_name == "蓝信" or conf_app_name=="e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
+                    if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
                         pyautogui.click(
-                            pos_to_mid[0], pos_to_mid[1], button="right")  # 右键点击关键字文本
+                            # 右键点击关键字文本
+                            pos_to_mid[0], pos_to_mid[1], button="right")
 
                         time.sleep(1)
 
                         pyautogui.click(
                             # 左键点击菜单项
                             pos_to_mid[0]+50, pos_to_mid[1]+y_offset, button="left")
-                    else: # e行安卓，长按弹出菜单
+                    else:  # e行安卓，长按弹出菜单
                         # 移动鼠标到指定位置
-                        pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1])
-                        
+                        pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1]+30)
+
                         # 按下鼠标左键
                         pyautogui.mouseDown(button='left')
-                        
+
                         # 等待一段时间，模拟长按效果
-                        time.sleep(1)  # 例如，长按1秒
-                        
+                        time.sleep(2)  # 例如，长按1秒
+
                         # 释放鼠标左键
                         pyautogui.mouseUp(button='left')
                         time.sleep(1)
-                        quota_image='quota_hdex_android.png'
-                        location_q = pyautogui.locateOnScreen(quota_image, confidence=0.8)  # 查找按钮图标
+                        quota_image = './resources/image/quota_hdex_android.png'
+                        location_q = pyautogui.locateOnScreen(
+                            quota_image, confidence=0.8)  # 查找按钮图标
                         if location_q:
                             print('图片位置:', location_q)
                             pyautogui.click(
@@ -991,7 +1091,7 @@ def check_screen():
                                 location_q[0], location_q[1], button="left")
                 else:
                     # 点击当前活动窗口内的相对坐标位置
-                    if conf_app_name == "蓝信" or conf_app_name=="e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
+                    if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
                         click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
                         time.sleep(1)
                         # 点击当前活动窗口内的相对坐标位置
@@ -1006,16 +1106,16 @@ def check_screen():
                 try:
                     # 查找图片位置
                     if conf_app_name == "蓝信":  # 蓝信
-                        toolbar_image = 'toolbar_lx.png'
-                        x_offset=0
+                        toolbar_image = './resources/image/toolbar_lx.png'
+                        x_offset = 0
                         y_offset = 80
-                    elif conf_app_name=="e行PC":  # HDe行
-                        toolbar_image = 'toolbar_hdex_pc.png'
-                        x_offset=0
+                    elif conf_app_name == "e行PC":  # HDe行
+                        toolbar_image = './resources/image/toolbar_hdex_pc.png'
+                        x_offset = 0
                         y_offset = 80
                     else:  # e行安卓
-                        toolbar_image = 'toolbar_hdex_android.png'
-                        x_offset=100
+                        toolbar_image = './resources/image/toolbar_hdex_android.png'
+                        x_offset = 100
                         y_offset = 0
                     location = pyautogui.locateOnScreen(
                         toolbar_image, confidence=0.8)  # 查找按钮图标
@@ -1026,8 +1126,9 @@ def check_screen():
                             location[0]+x_offset, location[1]+y_offset, button="left")
                         if conf_app_name == "蓝信":  # 蓝信
                             pass
-                        elif conf_app_name=="e行PC":  # HDe行
-                            keyboard.press_and_release('down')  # 因引文在文本框上部，靠近toolbar，按下向下键，避免选中引文
+                        elif conf_app_name == "e行PC":  # HDe行
+                            # 因引文在文本框上部，靠近toolbar，按下向下键，避免选中引文
+                            keyboard.press_and_release('down')
                         else:  # e行安卓
                             pass
                     else:
@@ -1041,10 +1142,10 @@ def check_screen():
                 wait_time = random.randint(0, 10)+0.5
                 textPad_insert("Wait Time: "+str(wait_time))
                 time.sleep(wait_time)
-                if conf_app_name == "蓝信" or conf_app_name=="e行PC":  # 蓝信/e行PC
+                if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC
                     pyautogui.press('enter')
                 else:  # e行安卓
-                    send_button_image = 'send_button_hdex_android.png'
+                    send_button_image = './resources/image/send_button_hdex_android.png'
                     location = pyautogui.locateOnScreen(
                         send_button_image, confidence=0.8)  # 查找按钮图标
                     if location:
@@ -1083,7 +1184,15 @@ def check_screen():
                 contents = contents + "<br>"+str(ocr_resp)
 
             if conf_wxmsg:
-                wxmsg(wxmsg_touser, contents)
+                if micromsg_method == "local":
+                    message = {
+                        "content": contents,
+                        "touser": wxmsg_touser
+                    }
+
+                    message_queue.put(message)
+                elif micromsg_method == "server":
+                    wxmsg(wxmsg_touser, contents)
 
             if conf_email:
                 send_email(
@@ -1212,8 +1321,17 @@ def send_sep(ocr, data, contents=""):
         else:
             print("No Email Address Found")
     if conf_wxmsg:
+
         if to_wx != "":
-            wxmsg(to_wx, contents)
+            if micromsg_method == "local":
+                message = {
+                    "content": contents,
+                    "touser": wxmsg_touser
+                }
+
+                message_queue.put(message)
+            elif micromsg_method == "server":
+                wxmsg(to_wx, contents)
         else:
             print("No Wxmsg Address")
     if conf_serial:
@@ -1228,11 +1346,173 @@ def send_sep(ocr, data, contents=""):
         serial_send("emb64", trans_data_b64)
 
 
-# 发送微信消息
+class AccessTokenManager:
+    """管理企业微信Access Token"""
+
+    def __init__(self, corp_id, corp_secret):
+        self.corp_id = corp_id
+        self.corp_secret = corp_secret
+        self.token = None
+        self.expire_time = 0
+        self.refresh_token()
+
+    def get_token(self):
+        """获取有效的access_token"""
+        if not self.token or time.time() > self.expire_time:
+            self.refresh_token()
+        return self.token
+
+    def refresh_token(self):
+        """刷新access_token"""
+        access_token_url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={self.corp_id}&corpsecret={self.corp_secret}"
+        try:
+            response = requests.get(access_token_url, timeout=10)
+            result = response.json()
+            if result.get("errcode") == 0:
+                self.token = result["access_token"]
+                self.expire_time = time.time() + result["expires_in"] - 300
+                loguru.logger.info("Access token refreshed")
+            else:
+                loguru.logger.error(f"刷新access_token失败: {result}")
+                raise Exception(f"刷新access_token失败: {result}")
+        except Exception as e:
+            loguru.logger.exception("刷新access_token时出错")
+            raise
+
+
+class DepartmentValidator:
+    """验证部门ID有效性"""
+
+    def __init__(self, token_manager):
+        self.token_manager = token_manager
+        self.valid_departments = set()
+        self.refresh_departments()
+
+    def refresh_departments(self):
+        """获取并缓存有效的部门ID"""
+        try:
+            access_token = self.token_manager.get_token()
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/department/list?access_token={access_token}"
+            response = requests.get(url, timeout=10)
+            result = response.json()
+
+            if result.get("errcode") == 0:
+                self.valid_departments = {
+                    str(dept["id"]) for dept in result.get("department", [])}
+                loguru.logger.info(
+                    f"已获取有效部门ID: {len(self.valid_departments)} 个")
+            else:
+                loguru.logger.error(f"获取部门列表失败: {result}")
+        except Exception as e:
+            loguru.logger.exception("刷新部门列表时出错")
+
+    def is_valid_department(self, dept_id):
+        """检查部门ID是否有效"""
+        if not self.valid_departments:
+            self.refresh_departments()
+        return dept_id in self.valid_departments
+
+    def filter_valid_departments(self, dept_ids):
+        """从列表或字符串中筛选有效部门ID"""
+        if isinstance(dept_ids, str):
+            dept_ids = dept_ids.split("|")
+
+        valid_ids = [
+            dept_id for dept_id in dept_ids if self.is_valid_department(dept_id)]
+        return "|".join(valid_ids)
+
+
+class MessageSender(threading.Thread):
+    """消息发送线程"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.token_manager = AccessTokenManager(
+            config["CORP_ID"], config["CORP_SECRET"])
+        self.department_validator = DepartmentValidator(self.token_manager)
+        self.agent_id = config["AGENT_ID"]
+
+    def run(self):
+        loguru.logger.info("消息发送线程已启动")
+        while not exit_flag.is_set():
+            try:
+                message = message_queue.get(timeout=5)
+
+                success = self.send_message(message)
+
+                if not success:
+                    time.sleep(30)
+                    message_queue.put(message)
+                    loguru.logger.warning(f"消息发送失败，已重新入队: {message['reqid']}")
+                else:
+                    self.record_message(message)
+
+                message_queue.task_done()
+            except queue.Empty:
+                continue
+            except Exception as e:
+                loguru.logger.exception("发送线程出错")
+                time.sleep(10)
+
+    def send_message(self, message, touser='', toparty=''):
+        """发送消息到企业微信"""
+        try:
+            access_token = self.token_manager.get_token()
+            send_msg_url = "https://qyapi.weixin.qq.com/cgi-bin/message/send"
+            params = {"access_token": access_token}
+            toparty = message['toparty'] if message['toparty'] else toparty
+            touser = message['touser'] if message['touser'] else touser
+
+            payload = {
+                "touser": touser,
+                "toparty": toparty,
+                "msgtype": "text",
+                "agentid": self.agent_id,
+                "text": {"content": message["content"]},
+                "safe": 0
+            }
+
+            response = requests.post(
+                send_msg_url, params=params, json=payload, timeout=10)
+            result = response.json()
+
+            if result.get("errcode") == 0:
+                loguru.logger.info(f"消息发送成功: {message['reqid']}")
+                return True
+            elif result.get("errcode") in [40014, 42001]:
+                loguru.logger.warning("Token已过期，尝试刷新...")
+                self.token_manager.refresh_token()
+                return False
+            else:
+                loguru.logger.error(f"消息发送失败: {result}")
+                return False
+        except Exception as e:
+            loguru.logger.exception(f"发送消息时出错: {message['reqid']}")
+            return False
+
+    def record_message(self, message):
+        """记录已发送消息的日志"""
+        filepath = os.path.join(LOGS_DIR, f"{message['reqid']}.txt")
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(message["content"])
+        except Exception as e:
+            loguru.logger.exception(f"记录日志失败: {message['reqid']}")
+
+    def get_valid_toparty(self, touser):
+        """获取有效的接收部门ID"""
+        # 获取责任部门ID
+        party_id = DEPARTMENT_MAPPING.get(touser, "12")
+
+        # 合并默认部门ID并过滤无效ID
+        all_parties = f"{party_id}|{self.valid_default_departments}"
+        return self.department_validator.filter_valid_departments(all_parties)
 
 
 @new_thread
 def wxmsg(touser, content):
+    # 发送微信消息 over http 中继服务器
     global secret_seed, wxmsg_url, wxmsg_method
     wechatdata = "touser=" + touser
     content = urllib.parse.quote(content, encoding='utf-8')
@@ -1578,6 +1858,10 @@ def prepare_conf_file(configpath):  # 准备配置文件
         config.set("Email", "smtptype", r"SSL")
 
         config.add_section("micromsg")
+        config.set("micromsg", "method", r"local")
+        config.set("micromsg", "CORP_ID", r"YOUR_CORP_ID")
+        config.set("micromsg", "CORP_SECRET", r"YOUR_CORP_SECRET")
+        config.set("micromsg", "AGENT_ID", r"YOUR_AGENT_ID")
         config.set(
             "micromsg", "wxmsg_url_get", r"http://pi.111.cn/pi/app/wxadminsiteerr.asp"
         )
@@ -1616,6 +1900,10 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
         "auto_reply": "1",
         "auto_reply_text": "收到，立即处置",
         "daemon_interval": "5",
+        "micromsg_method": "local",
+        "CORP_ID": "YOUR_CORP_ID",
+        "CORP_SECRET": "YOUR_CORP_SECRET",
+        "AGENT_ID": "YOUR_AGENT_ID",
         "wxmsg_url_get": "http://pi.111.cn/pi/app/wxadminsiteerr.asp",
         "wxmsg_url_post": "https://pi.111.cn/PI/app/overlimwx.php",
         "wxmsg_method": "POST",
@@ -1660,15 +1948,39 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
     else:
         return conf_item_settings[0]
 
-# 定时器
+
+def schedule_load(interval):
+    # 定时加载配置文件
+    schedule.every(interval).seconds.do(check_screen)  # 每10秒执行一次，检查屏幕
+    schedule.every(60*20).seconds.do(clean_msg_store)  # 每20分执行一次，清除消息存储
+    schedule.every(120).seconds.do(load_alert_words)  # 每120秒执行一次，加载关键词
+    schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次，加载联系人
+    schedule.every(3).seconds.do(run_play_music)  # 每3秒执行一次，播放报警音
 
 
 @new_thread
 def daemon_worker():
-    global app_run
-    while app_run == True:
-        schedule.run_pending()
-        time.sleep(1)
+    # 定时器
+    global app_run, daemon_interval, exit_flag
+
+    running_interval = 0
+    while 1 == 1:
+        if exit_flag.is_set() == True:
+            break
+
+        if running_interval != daemon_interval:
+            schedule.clear()
+            running_interval = daemon_interval
+            if running_interval < 1:
+                running_interval = 1
+            print("Daemon interval changed to: ", running_interval)
+            # 重新加载定时任务
+            schedule_load(running_interval)
+        while app_run == True and exit_flag.is_set() == False and running_interval == daemon_interval:
+            # print("Daemon running...")
+            # 执行定时任务
+            schedule.run_pending()
+            time.sleep(1)
 
 
 def quit_program():
@@ -1701,16 +2013,27 @@ def quit_program():
 
     # 尝试显示控制台
     try:
-        w_console.show()  # 显示控制台
-        w_console.restore()  # 恢复窗口
+        if w_console:
+            w_console.show()  # 显示控制台
+            w_console.restore()  # 恢复窗口
     except:
         pass
 
     # 关闭tkinter主窗口
     try:
-        if root and root.winfo_exists():
-            root.destroy()
-    except:
+        if 'root' in globals() and root is not None:
+            # 先销毁所有Tkinter变量
+            for name, var in list(root.__dict__.items()):
+                if isinstance(var, (tk.Variable, tk.Widget)):
+                    try:
+                        var.destroy()
+                    except Exception:
+                        pass
+            # 然后销毁主窗口
+            if root.winfo_exists():
+                root.quit()  # 先停止主循环
+                root.destroy()  # 再销毁窗口
+    except Exception:
         pass
 
     try:
@@ -1721,118 +2044,170 @@ def quit_program():
         sys.exit(0)
     except:
         pass
-# 闪屏
 
 
-@new_thread
 def splash_play():
-
     global splash
+    splash = tk.Toplevel(root)
 
-    def play_animation():
-        # 打开GIF图像文件
-        image = Image.open("reload.gif")
+    # 窗口设置
+    screen_width = splash.winfo_screenwidth()
+    screen_height = splash.winfo_screenheight()
+    width, height = 300, 200
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+    splash.geometry(f"{width}x{height}+{x}+{y}")
+    splash.overrideredirect(1)
+    splash.wm_attributes("-topmost", 1)
+    splash.attributes("-alpha", 0.8)
+    splash.configure(bg="gray99")  # 设置窗口背景色
 
-        # 获取图像的所有帧
-        frames = []
-        for frame in ImageSequence.Iterator(image):
-            frames.append(ImageTk.PhotoImage(frame))
+    # 使用Canvas而不是Label来显示，提供更多控制
+    canvas = tk.Canvas(splash, bg="gray99",
+                       highlightthickness=0, width=width, height=height)
+    canvas.pack(fill="both", expand=True)
 
-        # 创建一个标签显示GIF图像
-        label = tk.Label(splash, image=frames[0])
-        label.pack()
+    # 标题文本
+    title_label = tk.Label(
+        canvas,
+        text=f"{prog_window_title}\n",
+        font=("黑体", 12),
+        bg="gray99"
+    )
+    canvas.create_window((width/2, 30), window=title_label)
 
-        # 播放动画
-        def update_frame(frame_index):
-            # 更新标签的图像
-            label.configure(image=frames[frame_index])
+    # 创建动画容器（重要：使用Label代替Canvas创建图像）
+    img_container = tk.Label(canvas, bg="gray99", bd=0)
+    canvas.create_window((width/2, height/2), window=img_container)
 
-            # 获取下一帧的索引
-            next_frame_index = (frame_index + 1) % len(frames)
+    # 使用GIFLoader类加载GIF动画
+    class GIFLoader:
+        def __init__(self, label, gif_path):
+            self.label = label
+            self.gif_path = gif_path
+            self.frames = []
+            self.idx = 0
+            self.load_gif()
+            self.play()
 
-            # 在固定的时间间隔后调用更新函数
-            splash.after(100, update_frame, next_frame_index)
+        def load_gif(self):
+            try:
+                from PIL import Image, ImageTk, ImageSequence
+                with open(self.gif_path, "rb") as f:
+                    gif = Image.open(f)
+                    # 获取GIF的循环次数（非必需，但有助于精确控制）
+                    loop_count = 0
+                    for item in gif.info:
+                        if item == "loop":
+                            loop_count = gif.info[item]
+                    # 提取所有帧
+                    for frame in ImageSequence.Iterator(gif):
+                        frame = frame.resize((80, 80), Image.LANCZOS)
+                        self.frames.append(ImageTk.PhotoImage(frame))
+            except Exception as e:
+                # 加载失败时使用单帧图像
+                print(f"GIF加载出错: {e}")
+                img = ImageTk.PhotoImage(Image.open(
+                    "./resources/image/reload.gif").resize((80, 80), Image.LANCZOS))
+                self.frames = [img]
 
-        # 开始动画
-        update_frame(0)
+        def play(self):
+            if not splash.winfo_exists() or not self.frames:
+                return
 
-    def splash_stop():
-        # splash.quit()
-        try:
-            splash.quit()
-        except:
-            pass
+            self.label.config(image=self.frames[self.idx])
+            self.idx = (self.idx + 1) % len(self.frames)
+            splash.after(100, self.play)  # 根据GIF帧率调整播放速度
 
-    # 创建一个Tkinter窗口
-    splash = tk.Tk()
-    screenWidth = splash.winfo_screenwidth()  # 获取显示区域的宽度
-    screenHeight = splash.winfo_screenheight()  # 获取显示区域的高度
-    width = 300  # 设定窗口宽度
-    height = 200  # 设定窗口高度
-    left = (screenWidth - width) / 2
-    top = (screenHeight - height) / 2
+    # 使用修正后的方法加载动画
+    gif_loader = GIFLoader(img_container, "./resources/image/reload.gif")
 
-    # 宽度x高度+x偏移+y偏移
-    # 在设定宽度和高度的基础上指定窗口相对于屏幕左上角的偏移位置
-    splash.geometry("%dx%d+%d+%d" % (width, height, left, top))
-    splash.overrideredirect(1)  # 隐藏窗口边框
-    splash.wm_attributes("-transparentcolor", "gray99")  # 设置透明背景色
-    splash.wm_attributes("-topmost", 1)  # 置顶窗口
-    splash.attributes("-alpha", 0.8)  # 设置透明度
-    splash.after(4000, splash_stop)
-    splash_labl = tk.Label(splash, text=(
-        prog_window_title+"\n"), font=("黑体", 12))
-    splash_labl.pack()
-    # 在窗口中播放动画
-    play_animation()
-    splash_labl = tk.Label(splash, text="正在加载中，请稍后...", font=("黑体", 12))
-    splash_labl.pack()
-    # 运行Tkinter的事件循环
-    splash.mainloop()
+    # 保存对动画对象的引用
+    img_container.gif_loader = gif_loader
+
+    # 底部文本
+    bottom_label = tk.Label(
+        canvas,
+        text="正在加载中，请稍后...",
+        font=("黑体", 12),
+        bg="gray99"
+    )
+    canvas.create_window((width/2, height-30), window=bottom_label)
+
+    # 4秒后自动关闭
+    def safe_destroy():
+        if splash and splash.winfo_exists():
+            try:
+                splash.destroy()
+            except:
+                pass
+
+    splash.after(4000, safe_destroy)
+    splash.lift()
+    splash.update_idletasks()
+
+# ...（程序其余部分保持不变）...
 
 
 def get_resource_path(relative_path):
+    if relative_path.startswith("./"):
+        relative_path = relative_path[2:]
+    relative_path = relative_path.replace("/", "\\")
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
+    
     return os.path.join(os.path.abspath("."), relative_path)
 
 
 @new_thread
 def systray(icon):
+    while 1 == 1:
+        if root == None:
+            time.sleep(1)
+            continue
+        else:
+            break
     icon.run()
 
 
 def sw_console():
     global settings_window, sw_show
-
-    if not settings_window or not tk._default_root or not settings_window.winfo_exists():
-        # 窗口不存在则创建
-        settings_window = open_settings()
-        sw_show = True  # 创建后显示
-    else:
-        if sw_show:
-            # 当前显示则隐藏
-            settings_window.withdraw()
-            sw_show = False
+    # 确保主窗口存在
+    if 'root' in globals() and root is not None:
+        if not hasattr(tk, '_default_root') or not tk._default_root:
+            return
+        if settings_window == None or not tk._default_root or not settings_window.winfo_exists():
+            # 窗口不存在则创建
+            settings_window = open_settings()
+            sw_show = True  # 创建后显示
         else:
-            # 当前隐藏则显示
-            settings_window.deiconify()
-            settings_window.focus_force()
-            sw_show = True
+            if sw_show:
+                # 当前显示则隐藏
+                settings_window.withdraw()
+                sw_show = False
+            else:
+                # 当前隐藏则显示
+                settings_window.deiconify()
+                settings_window.focus_force()
+                sw_show = True
 # 修改3: 让open_settings返回创建的窗口
 
 
 def open_settings():
     """显示设置窗口"""
-    global settings_window, sw_show, textPad
-
+    global settings_window, sw_show, textPad, volume_label, conf_volume, scaler_volume, bt3_1, bt3_2, bt3_3, bt3_4
+    # 确保主窗口存在
+    if not hasattr(tk, '_default_root') or not tk._default_root:
+        return None
     # 如果窗口已经存在，则直接显示
     if settings_window and settings_window.winfo_exists():
         settings_window.deiconify()
         settings_window.focus_force()
         sw_show = True
         return settings_window
-
+    # 确保 scaler_volume 已初始化
+    if not hasattr(scaler_volume, 'get'):
+        scaler_volume = tk.IntVar(value=conf_volume)
     # 创建新窗口
     settings_window = tk.Toplevel(root)
     settings_window.title("程序设置")
@@ -1840,11 +2215,11 @@ def open_settings():
     # 修改4: 窗口关闭时隐藏而非销毁
     settings_window.protocol("WM_DELETE_WINDOW", lambda: sw_console())
 
-    settings_window.iconbitmap(get_resource_path("reload.gif"))  # 设置窗口图标
+    settings_window.iconbitmap(get_resource_path("./resources/image/reload.gif"))  # 设置窗口图标
     screenWidth = settings_window.winfo_screenwidth()  # 获取显示区域的宽度
     screenHeight = settings_window.winfo_screenheight()  # 获取显示区域的高度
-    width = 500  # 设定窗口宽度
-    height = 400  # 设定窗口高度
+    width = 550  # 设定窗口宽度
+    height = 500  # 设定窗口高度
     left = (screenWidth - width-50)
     top = (screenHeight - height-150)
 
@@ -1853,20 +2228,68 @@ def open_settings():
 
     settings_window.title(prog_window_title)
     # settings_window.protocol("WM_DELETE_WINDOW", quit_program)
-    tk.Label(settings_window, text=VERSION_TEXT).pack()
-    textPad = tk.Text(settings_window, undo=True)
+    view_frame = tk.Frame(settings_window, bg="#f0f0f0")
+    view_frame.pack(pady=5, fill=tk.BOTH, expand=True)
+
+    tk.Label(view_frame, text=VERSION_TEXT).pack()
+    textPad = tk.Text(view_frame, undo=True)
     textPad.pack(expand=tk.YES, fill=tk.BOTH)
     scroll = tk.Scrollbar(textPad)
     textPad.config(yscrollcommand=scroll.set)
     scroll.config(command=textPad.yview)
     scroll.pack(side=tk.RIGHT, fill=tk.Y)
-    bt1 = tk.Button(settings_window, text="启动监视!",
+
+    button_frame = tk.Frame(settings_window, bg="#f0f0f0")
+    button_frame.pack(fill=tk.X, pady=5)
+
+    label2 = tk.Label(button_frame, text="音量:").pack(side=tk.LEFT)
+    '''
+    bt2_1 = tk.Button(button_frame, text="小", command=lambda: set_volume(0.2)).pack(side=tk.LEFT)
+    bt2_2 = tk.Button(button_frame, text="中", command=lambda: set_volume(0.5)).pack(side=tk.LEFT)
+    bt2_3 = tk.Button(button_frame, text="大", command=lambda: set_volume(1)).pack(side=tk.LEFT)
+    '''
+    # 创建滑块组件
+    slider = ttk.Scale(
+        button_frame,
+        from_=0,       # 最小值
+        to=100,        # 最大值
+        orient=tk.HORIZONTAL,  # 水平方向
+        length=100,    # 滑块长度
+        command=set_volume,  # 值变化时的回调函数
+        variable=scaler_volume  # 绑定到变量
+    )
+    slider.pack(side=tk.LEFT, padx=5)
+    set_volume(50)  # 设置初始音量为50%
+    # 显示当前值的标签
+    volume_label = ttk.Label(button_frame, text=f"{int(scaler_volume.get())}%")
+    volume_label.pack(side=tk.LEFT, padx=5)
+    bt2 = tk.Button(button_frame, text="试",
+                    command=lambda: play_music(alert_mp3_file)).pack(side=tk.LEFT, padx=5)
+    label3 = tk.Label(button_frame, text="监视间隔:").pack(side=tk.LEFT, padx=10)
+    bt3_1 = tk.Button(button_frame, text="5",
+                      command=lambda: set_daemon_interval(5))
+    bt3_1.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
+    bt3_2 = tk.Button(button_frame, text="10",
+                      command=lambda: set_daemon_interval(10))
+    bt3_2.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
+    bt3_3 = tk.Button(button_frame, text="15",
+                      command=lambda: set_daemon_interval(15))
+    bt3_3.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
+    bt3_4 = tk.Button(button_frame, text="20",
+                      command=lambda: set_daemon_interval(20))
+    bt3_4.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
+    set_daemon_interval(daemon_interval)  # 设置初始监视间隔
+    button_frame2 = tk.Frame(settings_window, bg="#f0f0f0")
+    button_frame2.pack(fill=tk.X, pady=5)
+    label4 = tk.Label(button_frame2, text="控制:").pack(side=tk.LEFT)
+    bt1 = tk.Button(button_frame2, text="启动监视!",
                     command=lambda: set_daemon_permit("on")).pack(side=tk.LEFT)
-    bt2 = tk.Button(settings_window, text="消音!", command=lambda: set_alert_permit(
+    bt2 = tk.Button(button_frame2, text="消音!", command=lambda: set_alert_permit(
         "off")).pack(side=tk.LEFT)
-    bt3 = tk.Button(settings_window, text="停止监视!", command=lambda: set_daemon_permit(
+    bt3 = tk.Button(button_frame2, text="停止监视!", command=lambda: set_daemon_permit(
         "off")).pack(side=tk.LEFT)
-    bt4 = tk.Button(settings_window, text="退出程序!",
+    label4 = tk.Label(button_frame2, text=" ").pack(side=tk.LEFT)
+    bt4 = tk.Button(button_frame2, text="退出程序!",
                     command=quit_program).pack(side=tk.LEFT)
 
     settings_window.attributes('-topmost', True)
@@ -1901,6 +2324,12 @@ def process_queue():
 
 
 if __name__ == "__main__":
+    prog_window_title = '桌面关键字监视器'
+    root = None  # 初始化tkinter主窗口
+    root = tk.Tk()
+    root.withdraw()  # 隐藏主窗口
+    splash = ''
+    splash_play()
     # 读取配置文件-关键词分组
     msg_group = load_msg_groups()
 
@@ -1924,9 +2353,6 @@ if __name__ == "__main__":
     # required = False 只能用于可选参数。 对于可选参数，应该使用 - -，如果没有 - -，python 会将其视为位置参数。
     args = parser.parse_args()
 
-    prog_window_title = '桌面关键字监视器'
-    splash = ''
-    splash_play()
     last_sent_seprate = ''
     alert_msg = []
     img_md5_list = []
@@ -1947,11 +2373,12 @@ if __name__ == "__main__":
     # 定义文件路径
     configpath = r".\setup.ini"
     prepare_conf_file(configpath)
-    alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, conf_app_name, window_title, conf_serial, send_snapshot, send_seprate, auto_reply, auto_reply_text = (
+    daemon_interval, alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, conf_app_name, window_title, conf_serial, send_snapshot, send_seprate, auto_reply, auto_reply_text = (
         get_conf_from_file(
             configpath,
             "config",
             [
+                "daemon_interval",
                 "alert_mp3_file",
                 "send_wxmsg",
                 "send_email",
@@ -1967,6 +2394,10 @@ if __name__ == "__main__":
             ],
         )
     )
+    daemon_interval = int(daemon_interval)
+    print("daemon_interval:", daemon_interval)
+    alert_mp3_file = alert_mp3_file.strip()
+
     if ocr_method == "paddle":
         import paddleocr
     elif ocr_method == "easyocr":
@@ -2033,11 +2464,15 @@ if __name__ == "__main__":
             ],
         )
     if conf_wxmsg == True:
-        wxmsg_url_get, wxmsg_url_post, wxmsg_method, secret_seed, wxmsg_touser = (
+        micromsg_method, corp_id, corp_secret, agent_id, wxmsg_url_get, wxmsg_url_post, wxmsg_method, secret_seed, wxmsg_touser = (
             get_conf_from_file(
                 configpath,
                 "micromsg",
                 [
+                    "method",
+                    "CORP_ID",
+                    "CORP_SECRET",
+                    "AGENT_ID",
                     "wxmsg_url_get",
                     "wxmsg_url_post",
                     "wxmsg_method",
@@ -2046,7 +2481,21 @@ if __name__ == "__main__":
                 ],
             )
         )
-
+        if micromsg_method == "local":
+            message_queue = queue.Queue()
+            wxlocal_config = {
+                "CORP_ID": corp_id,
+                "CORP_SECRET": corp_secret,
+                "AGENT_ID": agent_id
+            }
+            sender_thread = MessageSender(wxlocal_config)
+            sender_thread.daemon = True
+            sender_thread.start()
+        elif micromsg_method == "server":
+            pass
+        else:
+            loguru.logger.error(
+                "micromsg_method must be 'local' or 'server',please check your config file.")
         if wxmsg_method == "GET":
             wxmsg_url = wxmsg_url_get
         else:
@@ -2067,19 +2516,8 @@ if __name__ == "__main__":
     alert_permit = False
     daemon_permit = False
 
-    schedule.every(20).seconds.do(check_screen)  # 每10秒执行一次，检查屏幕
-    schedule.every(60*20).seconds.do(clean_msg_store)  # 每20分执行一次，清除消息存储
-    schedule.every(120).seconds.do(load_alert_words)  # 每120秒执行一次，加载关键词
-    schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次，加载联系人
-    schedule.every(3).seconds.do(run_play_music)  # 每3秒执行一次，播放报警音
-
     serial_daemon()
     daemon_worker()
-
-    try:
-        splash.quit()
-    except:
-        pass
 
     menu_options = pystray.Menu(
         pystray.MenuItem("启动监视!", lambda: set_daemon_permit("on")),
@@ -2091,18 +2529,29 @@ if __name__ == "__main__":
         pystray.MenuItem("退出", quit_program)
     )
     icon = pystray.Icon(name="桌面关键字监视器", icon=Image.open(
-        get_resource_path("./reload.gif")), menu=menu_options, on_quit=quit_program)
+        get_resource_path("./resources/image/reload.gif")), menu=menu_options, on_quit=quit_program)
 
     systray(icon)
     """创建隐藏的tkinter主窗口"""
-    root = tk.Tk()
-    root.withdraw()  # 隐藏主窗口
 
+    try:
+        splash.destroy()
+    except:
+        pass
+    conf_volume = 50  # 初始化音量变量
+    scaler_volume = None  # 初始化音量滑块变量
+    volume_label = None  # 初始化音量标签
+    bt3_1 = None  # 初始化按钮变量
+    bt3_2 = None  # 初始化按钮变量
+    bt3_3 = None  # 初始化按钮变量
+    bt3_4 = None  # 初始化按钮变量
     # 修改1: 定义全局状态变量
-    settings_window = None
+    settings_window = None  # 确保settings_window是全局变量
     sw_show = False  # False表示隐藏，True表示显示
-    sw_console()  # 确保设置窗口在主循环结束后仍然可用
-    sw_console()  # 确保设置窗口在主循环结束后仍然可用
+    # 只调用一次 sw_console()
+    root.after(100, sw_console)  # 延迟100ms后调用，确保主循环已启动
+    root.after(0, sw_console)  # 延迟100ms后调用，确保主循环已启动
+    root.protocol("WM_DELETE_WINDOW", sw_console)  # 确保关闭窗口时调用sw_console
 
     # 启动队列处理
     root.after(100, process_queue)
