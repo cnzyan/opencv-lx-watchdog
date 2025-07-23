@@ -2153,6 +2153,7 @@ def schedule_load(interval):
     schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次，加载联系人
     schedule.every(3).seconds.do(run_play_music)  # 每3秒执行一次，播放报警音
     schedule.every(60*30).seconds.do(send_email_ipchg)  # 每30分执行一次，检查IP变化并发送邮件
+    schedule.every(60*60).seconds.do(textPad_save_and_clear)  # 每60分执行一次，保存并清除文本编辑器内容
 
 
 @new_thread
