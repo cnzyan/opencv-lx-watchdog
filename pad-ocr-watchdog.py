@@ -169,10 +169,57 @@ def play_music(file_path):
 def textPad_insert(text):
     # 在文本框中插入文本
     global textPad
+    if textPad == None:
+        print("TextPad is None, Cannot Insert Text")
+        return
     textPad.insert("end", text+"\n")
     textPad.see("end")
 
-
+def textPad_clear():
+    # 清空文本框
+    global textPad
+    if textPad == None:
+        print("TextPad is None, Cannot  Clear")
+        return
+    textPad.delete("1.0", "end")
+    print("TextPad Cleared")
+    textPad_insert("TextPad Cleared")
+def textPad_save():
+    # 保存文本框内容到文件
+    global textPad
+    if textPad == None:
+        print("TextPad is None, Cannot Save")
+        return
+    try:
+        filename= f"logs/textPad_content{get_curtime('%Y%m%d%')}.txt"
+        with open(filename, "w", encoding="utf-8") as f:
+            content = textPad.get("1.0", "end-1c")
+            f.write(content)
+        print("TextPad Content Saved")
+        textPad_insert("TextPad Content Saved")
+        return filename
+    except Exception as e:
+        print("Error Saving TextPad Content: ", str(e))
+        textPad_insert("Error Saving TextPad Content: "+str(e))
+def textPad_save_and_clear():
+    # 保存文本框内容到文件并清空文本框
+    global textPad
+    if textPad == None:
+        print("TextPad is None, Cannot Save and Clear")
+        return
+    line_count = int(textPad.index("end-1c").split('.')[0])
+    print("TextPad Line Count: ", line_count)
+    if line_count < 1000:
+        # print("TextPad is Empty, No Need to Save")
+        # textPad_insert("TextPad is Empty, No Need to Save")
+        return
+    try:
+        filename=textPad_save()
+        textPad_clear()
+        textPad_insert("TextPad Content Saved to "+filename)
+    except Exception as e:
+        print("Error Saving TextPad Content: ", str(e))
+        textPad_insert("Error Saving TextPad Content: "+str(e))
 def run_play_music():
     # 播放音频报警
     global alert_mp3_file, alert_permit, daemon_permit
@@ -225,6 +272,12 @@ def set_daemon_permit(tag="none"):
         else:
             daemon_permit = True
     if daemon_permit == True:
+        # 每次启动都清空文本框
+        textPad_save()
+        for i in range(0, 3):
+            time.sleep(0.5)
+            textPad_insert(".")
+        textPad_clear()
         print("WatchDog Started At ", get_curtime())
         textPad_insert("WatchDog Started At "+get_curtime())
     else:
@@ -649,10 +702,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                   filepath+"\\"+screenshot_filename)
         return im, fullscreen
 
-# 检查IP是否变化
 
-
-@new_thread
 def check_ip_change():
     """
     检查IP是否变化
@@ -677,6 +727,7 @@ def check_ip_change():
         return False, "检查IP变化失败"  # 返回False表示IP未变化
 
 
+@new_thread
 def send_email_ipchg():
     """
     发送IP变化邮件
@@ -698,10 +749,10 @@ def send_email_ipchg():
             smtptype=email_method
         )
 
-# 清理消息存储
 
 
-def clean_msg_store():
+
+def clean_msg_store():# 清理消息存储
     global alert_msg
     alert_msg = []
 
@@ -1387,6 +1438,31 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                                 if group in group_sent:
                                     continue
                                 group_sent.append(group)
+                                try:
+                                    if to_email == "":
+                                        to_email = contacts[group][0].strip()
+                                    else:
+                                        to_email = to_email+"," + \
+                                            contacts[group][0].strip()
+                                    if to_wx == "":
+                                        to_wx = contacts[group][1].strip().replace(
+                                            ",", "|")
+                                    else:
+                                        to_wx = to_wx+"|" + \
+                                            contacts[group][1].strip().replace(
+                                                ",", "|")
+                                except Exception as e:
+                                    print("Error in contacts: "+str(e))
+                                    textPad_insert("Error in contacts: "+str(e))
+                                    continue
+                    # 关键词分别发送对应联系人
+                    for alert_word in alert_words:
+                        if alert_word in word:
+                            group = alert_groups[alert_word]
+                            if group in group_sent:
+                                continue
+                            group_sent.append(group)
+                            try:
                                 if to_email == "":
                                     to_email = contacts[group][0].strip()
                                 else:
@@ -1399,25 +1475,10 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                                     to_wx = to_wx+"|" + \
                                         contacts[group][1].strip().replace(
                                             ",", "|")
-                    # 关键词分别发送对应联系人
-                    for alert_word in alert_words:
-                        if alert_word in word:
-                            group = alert_groups[alert_word]
-                            if group in group_sent:
+                            except Exception as e:
+                                print("Error in contacts: "+str(e))
+                                textPad_insert("Error in contacts: "+str(e))
                                 continue
-                            group_sent.append(group)
-                            if to_email == "":
-                                to_email = contacts[group][0].strip()
-                            else:
-                                to_email = to_email+"," + \
-                                    contacts[group][0].strip()
-                            if to_wx == "":
-                                to_wx = contacts[group][1].strip().replace(
-                                    ",", "|")
-                            else:
-                                to_wx = to_wx+"|" + \
-                                    contacts[group][1].strip().replace(
-                                        ",", "|")
             elif ocr_method == "easyocr":
                 if ocr_detail == 1:
                     word = line[1]
@@ -1429,16 +1490,21 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                         if group in group_sent:
                             continue
                         group_sent.append(group)
-                        if to_email == "":
-                            to_email = contacts[group][0].strip()
-                        else:
-                            to_email = to_email+","+contacts[group][0].strip()
-                        if to_wx == "":
-                            to_wx = contacts[group][1].strip().replace(
-                                ",", "|")
-                        else:
-                            to_wx = to_wx+"|" + \
-                                contacts[group][1].strip().replace(",", "|")
+                        try:
+                            if to_email == "":
+                                to_email = contacts[group][0].strip()
+                            else:
+                                to_email = to_email+","+contacts[group][0].strip()
+                            if to_wx == "":
+                                to_wx = contacts[group][1].strip().replace(
+                                    ",", "|")
+                            else:
+                                to_wx = to_wx+"|" + \
+                                    contacts[group][1].strip().replace(",", "|")
+                        except Exception as e:
+                            print("Error in contacts: "+str(e))
+                            textPad_insert("Error in contacts: "+str(e))
+                            continue
         pass
     else:
         pass
