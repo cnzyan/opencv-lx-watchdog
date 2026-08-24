@@ -30,8 +30,10 @@ from email.mime.text import MIMEText
 import threading
 from functools import wraps
 import queue
+
 # to fix OSError: [WinError 127] 找不到指定的程序。 Error loading "C:\Users\cnzya\AppData\Roaming\Python\Python313\site-packages\torch\lib\shm.dll" or one of its dependencies.
 import torch
+
 # fix end
 import ctypes
 
@@ -65,7 +67,7 @@ DEPARTMENT_MAPPING = {
     "青岛": "qingdao",
     "莱城": "laicheng",
     "章丘": "zhangqiu",
-    "龙口": "longkou"
+    "龙口": "longkou",
 }
 
 
@@ -87,6 +89,7 @@ def new_thread(fn):
         t.daemon = True  # 设置为守护线程
         t.start()
         return t
+
     return wrapper
 
 
@@ -99,7 +102,7 @@ def set_volume(val=50):
     elif val < 0:
         val = 0
     # 获取滑块当前值并更新变量和标签
-    if abs(val-conf_volume) < 5:
+    if abs(val - conf_volume) < 5:
         # print("Volume Not Changed, Current Value is ", conf_volume, "%")
         # textPad_insert("Volume Not Changed, Current Value is "+str(conf_volume)+"%")
         return
@@ -111,7 +114,7 @@ def set_volume(val=50):
         val = " " + val
     volume_label.config(text=f"{val}%")
     print("Set Volume To ", val, "%")
-    textPad_insert("Set Volume To "+str(val)+"%")
+    textPad_insert("Set Volume To " + str(val) + "%")
 
 
 def set_daemon_interval(val=20):
@@ -144,7 +147,7 @@ def set_daemon_interval(val=20):
         val = 60
     daemon_interval = val
     print("Set Daemon Interval To ", daemon_interval, " seconds")
-    textPad_insert("Set Daemon Interval To "+str(daemon_interval)+" seconds")
+    textPad_insert("Set Daemon Interval To " + str(daemon_interval) + " seconds")
 
 
 @new_thread
@@ -154,25 +157,29 @@ def play_music(file_path):
     play_method = "pygame"
     if play_method == "ffplay":
         import os
+
         cmd_line = "ffplay.exe -nodisp -autoexit " + file_path
         # print(cmd_line)
         os.system(cmd_line)
     elif play_method == "pygame":
         import pygame
+
         pygame.mixer.init()
-        pygame.mixer.music.set_volume(conf_volume/100)  # 设置音量
+        pygame.mixer.music.set_volume(conf_volume / 100)  # 设置音量
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
             continue
     elif play_method == "winsound":
         import winsound
+
         # winsound.PlaySound(file_path, winsound.SND_FILENAME)
         winsound.PlaySound("filename", winsound.SND_ASYNC | winsound.SND_ALIAS)
     else:
         import backup.playsound as playsound
+
         playsound.playsound(file_path, False)
-        print('Alert Sound Playing...')
+        print("Alert Sound Playing...")
 
 
 def textPad_insert(text):
@@ -181,8 +188,9 @@ def textPad_insert(text):
     if textPad == None:
         print("TextPad is None, Cannot Insert Text")
         return
-    textPad.insert("end", text+"\n")
+    textPad.insert("end", text + "\n")
     textPad.see("end")
+
 
 def textPad_clear():
     # 清空文本框
@@ -193,6 +201,8 @@ def textPad_clear():
     textPad.delete("1.0", "end")
     print("TextPad Cleared")
     textPad_insert("TextPad Cleared")
+
+
 def textPad_save():
     # 保存文本框内容到文件
     global textPad
@@ -200,7 +210,7 @@ def textPad_save():
         print("TextPad is None, Cannot Save")
         return "TextPad is None, Cannot Save"
     try:
-        filename= f"logs/textPad_content{get_curtime('%Y%m%d%H%M%S')}.txt"
+        filename = f"logs/textPad_content{get_curtime('%Y%m%d%H%M%S')}.txt"
         with open(filename, "w", encoding="utf-8") as f:
             content = textPad.get("1.0", "end")
             f.write(content)
@@ -209,36 +219,40 @@ def textPad_save():
         return filename
     except Exception as e:
         print("Error Saving TextPad Content: ", str(e))
-        textPad_insert("Error Saving TextPad Content: "+str(e))
-        return "Error Saving TextPad Content: "+str(e)
+        textPad_insert("Error Saving TextPad Content: " + str(e))
+        return "Error Saving TextPad Content: " + str(e)
+
+
 def textPad_save_and_clear():
     # 保存文本框内容到文件并清空文本框
     global textPad
     if textPad == None:
         print("TextPad is None, Cannot Save and Clear")
         return
-    line_count = int(len(textPad.get("1.0","end").splitlines()))
+    line_count = int(len(textPad.get("1.0", "end").splitlines()))
     print("TextPad Line Count: ", line_count)
     if line_count < 1000:
         # print("TextPad is Empty, No Need to Save")
         # textPad_insert("TextPad is Empty, No Need to Save")
         return
     try:
-        filename=textPad_save()
+        filename = textPad_save()
         for i in range(0, 3):
             time.sleep(0.5)
             textPad_insert(".")
         textPad_clear()
-        textPad_insert("TextPad Content Saved to "+filename)
+        textPad_insert("TextPad Content Saved to " + filename)
     except Exception as e:
         print("Error Saving TextPad Content: ", str(e))
-        textPad_insert("Error Saving TextPad Content: "+str(e))
+        textPad_insert("Error Saving TextPad Content: " + str(e))
+
+
 def run_play_music():
     # 播放音频报警
     global alert_mp3_file, alert_permit, daemon_permit
-    if 'resources/audio' not in alert_mp3_file:
+    if "resources/audio" not in alert_mp3_file:
         # 如果路径中不包含'resources/audio'，需要添加前缀
-        alert_mp3_file = './resources/audio/' + alert_mp3_file
+        alert_mp3_file = "./resources/audio/" + alert_mp3_file
     # print("Alert MP3 File: ", alert_mp3_file)
     if os.path.exists(alert_mp3_file) == False:
         alert_mp3_file = "./resources/audio/alert.mp3"
@@ -250,6 +264,17 @@ def run_play_music():
             # print("Alert Permitted is False, Skip Play Music")
         else:
             pass
+
+
+def play_test_sound():
+    """试音函数，不受 alert_permit 限制"""
+    global alert_mp3_file
+    file_path = alert_mp3_file
+    if "resources/audio" not in file_path:
+        file_path = "./resources/audio/" + file_path
+    if os.path.exists(file_path) == False:
+        file_path = "./resources/audio/alert.mp3"
+    play_music(file_path)
 
 
 def set_alert_permit(tag="none"):
@@ -289,18 +314,18 @@ def set_daemon_permit(tag="none"):
         textPad_save_and_clear()
 
         print("WatchDog Started At ", get_curtime())
-        textPad_insert("WatchDog Started At "+get_curtime())
+        textPad_insert("WatchDog Started At " + get_curtime())
     else:
         print("WatchDog Stopped At ", get_curtime())
-        textPad_insert("WatchDog Stopped At "+get_curtime())
+        textPad_insert("WatchDog Stopped At " + get_curtime())
 
 
-'''
+"""
 def get_curtime(time_format="%Y-%m-%d %H:%M:%S"):
     curTime = time.localtime()
     curTime = time.strftime(time_format, curTime)
     return curTime
-'''
+"""
 
 
 def get_curtime(time_format="%Y-%m-%d %H:%M:%S", offset=0):
@@ -311,13 +336,14 @@ def get_curtime(time_format="%Y-%m-%d %H:%M:%S", offset=0):
     return curTime
 
 
-def put_email_queue(message,  smtp_host, smtp_port,  mail_user, mail_pass, smtptype):
+def put_email_queue(message, smtp_host, smtp_port, mail_user, mail_pass, smtptype):
     """
     创建一个邮件队列
     """
     delay = 0
-    email_queue.put((message, smtp_host, smtp_port,
-                    mail_user, mail_pass, smtptype, delay))
+    email_queue.put(
+        (message, smtp_host, smtp_port, mail_user, mail_pass, smtptype, delay)
+    )
 
 
 @new_thread
@@ -347,6 +373,8 @@ def process_email_queue(email_queue):
             re_put = True
         if re_put:
             email_queue.put((msg, host, port, user, passwd, security, delay))
+
+
 # 组合邮件内容
 
 
@@ -391,10 +419,13 @@ def send_email(
         message.attach(part1)
 
         # message.attach(picture)
-        return put_email_queue(message,  smtp_host, smtp_port,  mail_user, mail_pass, smtptype)
+        return put_email_queue(
+            message, smtp_host, smtp_port, mail_user, mail_pass, smtptype
+        )
 
     else:
         return send_mail_http(Subject, content, tomail)
+
 
 # AES ECB加密
 
@@ -405,10 +436,11 @@ def AES_ECB_ENCRYPT(plain_text, secretKey):
     key = secretKey.encode()
     cipher = AES.new(key, AES.MODE_ECB)
     # 确保明文长度是16的倍数
-    pad = 16 - len(plain_text.encode('utf-8')) % 16
+    pad = 16 - len(plain_text.encode("utf-8")) % 16
     plain_text += chr(pad) * pad
     encrypted_text = cipher.encrypt(plain_text.encode())
     return base64.b64encode(encrypted_text).decode()
+
 
 # AES ECB解密
 
@@ -419,33 +451,30 @@ def AES_ECB_DECRYPT(textBase64, secretKey):
     decrypted_text = cipher.decrypt(base64.b64decode(textBase64))
     return decrypted_text.decode()
 
+
 # 发送邮件-通过HTTP中继服务器
 
 
 def send_mail_http(Subject, content, tomail):
     secret_seed = server_secret  # 服务器密钥
     secret_today = hashlib.md5(
-        (secret_seed + get_curtime("%Y%m%d")).encode()).hexdigest()
+        (secret_seed + get_curtime("%Y%m%d")).encode()
+    ).hexdigest()
     content_b64 = base64.b64encode(content.encode()).decode()
-    origin = {
-        "subject": Subject,
-        "content": content_b64,
-        "tomail": tomail
-    }
+    origin = {"subject": Subject, "content": content_b64, "tomail": tomail}
     origin = str(origin)
     http_transport_data = AES_ECB_ENCRYPT(origin, secret_today)
-    postdata = {
-        "secret": secret_today,
-        "content": http_transport_data
-    }
+    postdata = {"secret": secret_today, "content": http_transport_data}
     try:
-        resp = requests.post(url=server_url, data=postdata,
-                             verify=False).content.decode('utf-8')
-        loguru.logger.info("邮件发送成功 to "+tomail+':'+resp)
+        resp = requests.post(
+            url=server_url, data=postdata, verify=False
+        ).content.decode("utf-8")
+        loguru.logger.info("邮件发送成功 to " + tomail + ":" + resp)
         return True
     except Exception as e:
-        loguru.logger.error("邮件发送失败"+str(e))
+        loguru.logger.error("邮件发送失败" + str(e))
         return False
+
 
 # 发送邮件
 
@@ -494,20 +523,21 @@ def send_mail(
 
 
 def ocr_get_txt_pos(path="", text=""):
-    '''
+    """
     获取文字与位置对应map
     :param path:图片路径，图片路径为空则默认获取当前屏幕截图
     :param text: 筛选需要查找的内容，匹配所有位置
     :return:list
-    '''
+    """
 
     result, img_path, image, fs = ocr_img_text(path, saveimg=True)
 
     print("图片识别结果保存：", img_path)
 
     # 把结果列表的两个值分别再存为两个list
-    poslist = [detection[0][0]
-               for line in result for detection in line]  # 取top一个点的位置
+    poslist = [
+        detection[0][0] for line in result for detection in line
+    ]  # 取top一个点的位置
     txtlist = [detection[1][0] for line in result for detection in line]
 
     # 用list存文字与位置信息
@@ -558,9 +588,10 @@ def ocr_img_text(
         image = numpy.array(image)
     if engine == "paddle":
         global _paddle_ocr_instance
-        if '_paddle_ocr_instance' not in globals() or _paddle_ocr_instance is None:
+        if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
             _paddle_ocr_instance = paddleocr.PaddleOCR(
-                use_angle_cls=True, lang="ch", show_log=False)
+                use_angle_cls=True, lang="ch", show_log=False
+            )
 
         result = _paddle_ocr_instance.ocr(image, cls=True)
         if printResult is True:
@@ -582,14 +613,19 @@ def ocr_img_text(
     else:  # tesseract
         if conf_detail == 1:
             result = pytesseract.image_to_data(
-                image, lang="chi_sim+eng", output_type=pytesseract.Output.DICT)
+                image, lang="chi_sim+eng", output_type=pytesseract.Output.DICT
+            )
 
             if printResult is True:
                 print(result)
         else:
             result = pytesseract.image_to_string(image, lang="chi_sim+eng")
     if debug:
-        with open("ocr_result_"+engine+"_"+get_curtime("%H%M%S")+".txt", "w", encoding="utf-8") as f:
+        with open(
+            "ocr_result_" + engine + "_" + get_curtime("%H%M%S") + ".txt",
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(str(result))
 
     # 识别出来的文字保存为图片
@@ -612,8 +648,7 @@ def ocr_img_text(
                 # print(detection)
                 top_left = tuple([int(val) for val in detection[0][0]])
                 bottom_right = tuple([int(val) for val in detection[0][2]])
-                im_show = cv2.rectangle(
-                    im_show, top_left, bottom_right, (0, 255, 0), 2)
+                im_show = cv2.rectangle(im_show, top_left, bottom_right, (0, 255, 0), 2)
                 im_show = cv2.putText(
                     im_show,
                     detection[1],
@@ -625,14 +660,15 @@ def ocr_img_text(
                 )
         else:
             im_show = image
-        filepath = 'screenshots'
+        filepath = "screenshots"
         if not os.path.isdir(filepath):
             # 创建文件夹
             os.mkdir(filepath)
         im_show = Image.fromarray(im_show)
-        im_show.save(filepath+"\\"+img_name)
+        im_show.save(filepath + "\\" + img_name)
 
     return result, img_name, image, fullscreen
+
 
 # 截图
 
@@ -643,6 +679,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
     截图
     :return:Image
     """
+
     def active_window(w_title):
         windows = pygetwindow.getWindowsWithTitle(w_title)
         if len(windows) == 0:
@@ -661,7 +698,8 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                     return False
             else:
                 return True
-    filepath = 'screenshots'
+
+    filepath = "screenshots"
     if not os.path.isdir(filepath):
         # 创建文件夹
         os.mkdir(filepath)
@@ -691,20 +729,30 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                     print("Window Active Failed.")
                     fullscreen = "yes"
                 # 获取窗口的位置和大小
-                x, y, width, height = window.left, window.top, window.width, window.height
+                x, y, width, height = (
+                    window.left,
+                    window.top,
+                    window.width,
+                    window.height,
+                )
                 w_left, w_top = window.left, window.top
                 # 截取窗口的屏幕截图
                 screenshot = pyautogui.screenshot(region=(x, y, width, height))
             except Exception as e:
-                print("Window Screenshot Failed."+str(e))
+                print("Window Screenshot Failed." + str(e))
                 fullscreen = "yes"
             # 保存截图
             if saving == True:
-                screenshot_filename = "window_screenshot" + \
-                    get_curtime("%Y%m%d%H%M%S")+".png"
-                screenshot.save(filepath+"\\"+screenshot_filename)
-                print("Screenshot of the window saved as " +
-                      filepath+"\\"+screenshot_filename)
+                screenshot_filename = (
+                    "window_screenshot" + get_curtime("%Y%m%d%H%M%S") + ".png"
+                )
+                screenshot.save(filepath + "\\" + screenshot_filename)
+                print(
+                    "Screenshot of the window saved as "
+                    + filepath
+                    + "\\"
+                    + screenshot_filename
+                )
             return screenshot, fullscreen
     else:
         pass
@@ -712,11 +760,16 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
         im = ImageGrab.grab()
         # 保存截图
         if saving == True:
-            screenshot_filename = "window_screenshot" + \
-                get_curtime("%Y%m%d%H%M%S")+".png"
-            im.save(filepath+"\\"+screenshot_filename)
-            print("Screenshot fullscreen saved as " +
-                  filepath+"\\"+screenshot_filename)
+            screenshot_filename = (
+                "window_screenshot" + get_curtime("%Y%m%d%H%M%S") + ".png"
+            )
+            im.save(filepath + "\\" + screenshot_filename)
+            print(
+                "Screenshot fullscreen saved as "
+                + filepath
+                + "\\"
+                + screenshot_filename
+            )
         return im, fullscreen
 
 
@@ -763,13 +816,11 @@ def send_email_ipchg():
             mail_user=mail_user,
             mail_pass=mail_pass,
             sender_email=sender_email,
-            smtptype=email_method
+            smtptype=email_method,
         )
 
 
-
-
-def clean_msg_store():# 清理消息存储
+def clean_msg_store():  # 清理消息存储
     global alert_msg
     alert_msg = []
 
@@ -786,25 +837,36 @@ def check_unread_msg(image, ocr_resp):
 
     # print(alert_msg)
     text_to_detect = "条新消息"
-    detect_list = ["条新消息", "条新", "条新消", "条", "新消息", "新消", "新", "消息", "消", "息"]
+    detect_list = [
+        "条新消息",
+        "条新",
+        "条新消",
+        "条",
+        "新消息",
+        "新消",
+        "新",
+        "消息",
+        "消",
+        "息",
+    ]
     unread_detected = False
     if ocr_method == "tesseract":
-        all_text = ''
-        for word in ocr_resp['text']:
-            all_text = all_text+word
+        all_text = ""
+        for word in ocr_resp["text"]:
+            all_text = all_text + word
         if ocr_detail == 1:
 
             for chr in text_to_detect:
                 if chr not in all_text:
                     return False
 
-            for word in ocr_resp['text']:
+            for word in ocr_resp["text"]:
                 if word in detect_list:
-                    pos_index = get_index_of_list(ocr_resp['text'], word)
+                    pos_index = get_index_of_list(ocr_resp["text"], word)
                     if word != text_to_detect:
                         for index in pos_index:
                             if index != -1:
-                                if ocr_resp['text'][index+1] in detect_list:
+                                if ocr_resp["text"][index + 1] in detect_list:
                                     print("Unread Msg Found!!!")
                                     textPad_insert("Unread Msg Found!!!")
                                     unread_detected = True
@@ -814,8 +876,12 @@ def check_unread_msg(image, ocr_resp):
                         unread_detected = True
                     break
             if unread_detected == True:
-                pos = [ocr_resp['left'][index], ocr_resp['top'][index],
-                       ocr_resp['width'][index], ocr_resp['height'][index]]
+                pos = [
+                    ocr_resp["left"][index],
+                    ocr_resp["top"][index],
+                    ocr_resp["width"][index],
+                    ocr_resp["height"][index],
+                ]
                 return pos
             else:
                 return False
@@ -827,15 +893,23 @@ def check_unread_msg(image, ocr_resp):
                 for word in line:
                     if text_to_detect in word[1][0]:
                         unread_detected = True
-                        pos = [word[0][0][0], word[0][0][1], word[0][2]
-                               [0]-word[0][0][0], word[0][2][1]-word[0][0][1]]
+                        pos = [
+                            word[0][0][0],
+                            word[0][0][1],
+                            word[0][2][0] - word[0][0][0],
+                            word[0][2][1] - word[0][0][1],
+                        ]
 
             elif ocr_method == "easyocr":
                 if ocr_detail == 1:
                     if text_to_detect in line[1]:
                         unread_detected = True
-                        pos = [line[0][0][0], line[0][0][1], line[0][2]
-                               [0]-line[0][0][0], line[0][2][1]-line[0][0][1]]
+                        pos = [
+                            line[0][0][0],
+                            line[0][0][1],
+                            line[0][2][0] - line[0][0][0],
+                            line[0][2][1] - line[0][0][1],
+                        ]
             else:
                 return False
 
@@ -847,10 +921,10 @@ def check_unread_msg(image, ocr_resp):
 
 
 def click_unread_msg(pos):
-    pos_x = pos[0]+pos[2]/2 + w_left
-    pos_y = pos[1]+pos[3]/2 + w_top
-    pyautogui.click(pos_x, pos_y, button='left')
-    textPad_insert("Mouse Click At "+str(pos_x)+","+str(pos_y))
+    pos_x = pos[0] + pos[2] / 2 + w_left
+    pos_y = pos[1] + pos[3] / 2 + w_top
+    pyautogui.click(pos_x, pos_y, button="left")
+    textPad_insert("Mouse Click At " + str(pos_x) + "," + str(pos_y))
     # pyautogui.click(100, 150, button='left')
     # pyautogui.click('屏幕区块.png')
     pass
@@ -861,7 +935,9 @@ def split_string(s):
     # [a-zA-Z0-9_]+ : 连续英文字母、数字、下划线
     # | : 或
     # \S : 单个非空白字符 (包括中文、标点等)
-    return re.findall(r'[a-zA-Z0-9_]+|\S', s)
+    return re.findall(r"[a-zA-Z0-9_]+|\S", s)
+
+
 # 检查屏幕内容
 
 
@@ -875,7 +951,8 @@ def click_in_window(x, y, key="left"):
         return
 
     print(
-        f"活动窗口信息: {active_win.title} | 大小: {active_win.size} | 位置: {active_win.topleft}")
+        f"活动窗口信息: {active_win.title} | 大小: {active_win.size} | 位置: {active_win.topleft}"
+    )
 
     # 计算绝对坐标 (窗口位置 + 相对位置)
     absolute_x = active_win.left + x
@@ -915,8 +992,7 @@ def compress_image(img, target_width=1280, target_height=800, quality=85):
         new_height = int(original_height * scale_ratio)
 
         # 调整图像大小（使用高质量插值）
-        resized_img = img.resize(
-            (new_width, new_height), Image.Resampling.LANCZOS)
+        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
         # 保存图像（根据格式调整参数，JPEG使用quality，PNG可忽略）
         return resized_img
@@ -942,40 +1018,55 @@ def check_screen():
         # print(alert_msg)
         alert_found = False
         print("WatchDog Checking At ", get_curtime())
-        textPad_insert("WatchDog Checking At "+get_curtime())
+        textPad_insert("WatchDog Checking At " + get_curtime())
 
         # e行PC模式下，使用三张定位图片裁剪有效检测区域（排除标题栏、侧边栏和工具栏）
         crop_region = None
         if conf_app_name == "e行PC":
             try:
                 # 定位左侧边缘图：取其最右下坐标作为裁剪左边界
-                left_loc = pyautogui.locateOnScreen(
-                    get_resource_path_dpi("./resources/image/left_edge_hdex_pc.png"),
-                    confidence=0.8,
-                    region=(w_left, w_top, 200, 800)  # 仅在窗口左侧区域搜索
-                )
+                try:
+                    left_loc = pyautogui.locateOnScreen(
+                        get_resource_path_dpi(
+                            "./resources/image/left_edge_hdex_pc.png"
+                        ),
+                        confidence=0.8,
+                        region=(w_left, w_top, 200, 800),  # 仅在窗口左侧区域搜索
+                    )
+                except pyautogui.ImageNotFoundException:
+                    left_loc = None
                 # 定位右上边缘图：取其最左下坐标作为裁剪右边界
-                right_loc = pyautogui.locateOnScreen(
-                    get_resource_path_dpi("./resources/image/rightup_edge_hdex_pc.png"),
-                    confidence=0.8,
-                    region=(w_left + 500, w_top, 400, 600)  # 仅在窗口右侧区域搜索
-                )
+                try:
+                    right_loc = pyautogui.locateOnScreen(
+                        get_resource_path_dpi(
+                            "./resources/image/rightup_edge_hdex_pc.png"
+                        ),
+                        confidence=0.8,
+                        region=(w_left + 500, w_top, 400, 600),  # 仅在窗口右侧区域搜索
+                    )
+                except pyautogui.ImageNotFoundException:
+                    right_loc = None
                 # 定位工具栏图（在聊天下方）：取其最上坐标作为裁剪下边界
-                toolbar_loc = pyautogui.locateOnScreen(
-                    get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png"),
-                    confidence=0.8,
-                    region=(w_left, w_top, 800, 200)  # 仅在窗口顶部区域搜索
-                )
+                try:
+                    toolbar_loc = pyautogui.locateOnScreen(
+                        get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png"),
+                        confidence=0.8,
+                        region=(w_left, w_top, 800, 200),  # 仅在窗口顶部区域搜索
+                    )
+                except pyautogui.ImageNotFoundException:
+                    toolbar_loc = None
                 if left_loc and right_loc and toolbar_loc:
                     crop_left = left_loc.left + left_loc.width  # 左图最右下x
                     crop_right = right_loc.left  # 右上图最左下x
-                    crop_bottom = toolbar_loc.top  # 工具栏最上坐标作为裁剪下边界（保留其上方的聊天内容）
+                    crop_bottom = (
+                        toolbar_loc.top
+                    )  # 工具栏最上坐标作为裁剪下边界（保留其上方的聊天内容）
                     # 裁剪区域相对于窗口（screenshot区域）的坐标
                     crop_region = (
                         crop_left - w_left,
                         0,  # 上边界从0开始（窗口顶部）
                         crop_right - crop_left,
-                        crop_bottom - w_top  # 下边界到工具栏最上坐标
+                        crop_bottom - w_top,  # 下边界到工具栏最上坐标
                     )
                     print(f"e行PC裁剪区域: {crop_region}")
                     textPad_insert(f"e行PC裁剪区域: {crop_region}")
@@ -1001,11 +1092,16 @@ def check_screen():
                 if crop_x + crop_w > image.shape[1]:
                     crop_w = image.shape[1] - crop_x
                 if crop_w > 0 and crop_h > 0:
-                    cropped_image = image[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
+                    cropped_image = image[
+                        crop_y : crop_y + crop_h, crop_x : crop_x + crop_w
+                    ]
                     # 对裁剪后的图像重新做OCR
                     ocr_resp, img_filename, image, fullscreen = ocr_img_text(
-                        path=cropped_image, saveimg=False, printResult=False,
-                        conf_detail=ocr_detail, engine=ocr_method
+                        path=cropped_image,
+                        saveimg=False,
+                        printResult=False,
+                        conf_detail=ocr_detail,
+                        engine=ocr_method,
                     )
                     print(f"裁剪后OCR完成，裁剪区域: {crop_region}")
                     textPad_insert(f"裁剪后OCR完成，裁剪区域: {crop_region}")
@@ -1014,10 +1110,10 @@ def check_screen():
                 textPad_insert(f"裁剪后OCR失败: {e}")
         if ocr_method == "tesseract":
             if ocr_detail == 1:
-                ocr_temp = ''
+                ocr_temp = ""
                 for i in range(len(ocr_resp["text"])):
                     if ocr_resp["text"][i] != "":  # 去除空行
-                        ocr_temp = ocr_temp+ocr_resp["text"][i]
+                        ocr_temp = ocr_temp + ocr_resp["text"][i]
                 ocr_resp_tes = ocr_temp
 
             else:
@@ -1029,31 +1125,48 @@ def check_screen():
                     if alert_word in line:
                         detect_list = split_string(alert_word)
                         for word in detect_list:
-                            pos_index = get_index_of_list(
-                                ocr_resp["text"], word)
+                            pos_index = get_index_of_list(ocr_resp["text"], word)
                             if word != alert_word:
                                 for index in pos_index:
                                     if index != -1:
-                                        if ocr_resp['text'][index+1] in detect_list:
+                                        if ocr_resp["text"][index + 1] in detect_list:
                                             # 找到关键词坐标
                                             pos_detected = True
                                             pos_to_mid = [
-                                                (ocr_resp["left"][index] +
-                                                 ocr_resp["left"][index+1])/2,
-                                                (ocr_resp["top"][index] +
-                                                 ocr_resp["top"][index+1])/2
+                                                (
+                                                    ocr_resp["left"][index]
+                                                    + ocr_resp["left"][index + 1]
+                                                )
+                                                / 2,
+                                                (
+                                                    ocr_resp["top"][index]
+                                                    + ocr_resp["top"][index + 1]
+                                                )
+                                                / 2,
                                             ]
                             else:
                                 pos_detected = True
                                 index = pos_index[0]
-                                pos_to_mid = [ocr_resp["left"][index] + ocr_resp["width"][index]/2,
-                                              ocr_resp["top"][index] + ocr_resp["height"][index]/2]
+                                pos_to_mid = [
+                                    ocr_resp["left"][index]
+                                    + ocr_resp["width"][index] / 2,
+                                    ocr_resp["top"][index]
+                                    + ocr_resp["height"][index] / 2,
+                                ]
                             if pos_detected:
                                 # 检查是否有特征像素
                                 pixel_char_count = 0
-                                roi = image[int(ocr_resp["top"][index]):int(ocr_resp["top"][index]+ocr_resp["height"][index]), int(
-                                    ocr_resp["left"][index]):int(ocr_resp["left"][index]+ocr_resp["width"][index])]
-                                '''
+                                roi = image[
+                                    int(ocr_resp["top"][index]) : int(
+                                        ocr_resp["top"][index]
+                                        + ocr_resp["height"][index]
+                                    ),
+                                    int(ocr_resp["left"][index]) : int(
+                                        ocr_resp["left"][index]
+                                        + ocr_resp["width"][index]
+                                    ),
+                                ]
+                                """
                                 for row in roi:
                                     for pixel in row:
                                         # 现在pixel是一个一维数组（三个元素）
@@ -1069,17 +1182,20 @@ def check_screen():
                                                     "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
                                                 alert_found = True
                                                 break
-                                '''
+                                """
                                 # HDe行 接收 e8e8e9 发送 c9e7ff
                                 # 蓝信 接收FFFFFF 发送 6392ed
                                 # 判断每个像素是否所有通道都<=80
                                 # 得到二维布尔数组，每个元素表示该像素是否所有通道<=80
-                                if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
+                                if (
+                                    conf_app_name == "蓝信"
+                                ):  # 蓝信接收到的文字为黑色，判断黑色像素数量
                                     char_pixels = (roi <= 80).all(axis=2)
                                     char_num = 20
-                                elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色 (#E4E4E5)，判断灰白像素数量
-                                    char_pixels = (
-                                        roi >= 228).all(axis=2)
+                                elif (
+                                    conf_app_name == "e行PC"
+                                ):  # HDe行接收到的文字为背景为灰白色 (#E4E4E5)，判断灰白像素数量
+                                    char_pixels = (roi >= 228).all(axis=2)
                                     char_num = 60
                                 else:  # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
                                     char_pixels = (roi >= 250).all(axis=2)
@@ -1087,14 +1203,24 @@ def check_screen():
                                 pixel_char_count = char_pixels.sum()
                                 if pixel_char_count > char_num:
                                     alert_found = True
-                                    print("Alert Word Found: ", word, " at position: ",
-                                          pos_to_mid, " with dark pixel count: ", pixel_char_count)
+                                    print(
+                                        "Alert Word Found: ",
+                                        word,
+                                        " at position: ",
+                                        pos_to_mid,
+                                        " with dark pixel count: ",
+                                        pixel_char_count,
+                                    )
                                     textPad_insert(
-                                        "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
-                        '''
+                                        "Alert Word Found: "
+                                        + word
+                                        + " at position: "
+                                        + str(pos_to_mid)
+                                    )
+                        """
                         alert_found = True
                         break
-                        '''
+                        """
                     if alert_found == True:
                         if word in alert_msg:
                             alert_found = False
@@ -1119,31 +1245,62 @@ def check_screen():
                                     try:
                                         image_save = Image.fromarray(image)
                                         image_save = compress_image(
-                                            image_save, target_width=1280, target_height=800, quality=85)
+                                            image_save,
+                                            target_width=1280,
+                                            target_height=800,
+                                            quality=85,
+                                        )
                                         image_save.save(
-                                            "screenshots\\"+img_filename, format='JPEG')
+                                            "screenshots\\" + img_filename,
+                                            format="JPEG",
+                                        )
                                         image_saved = True
-                                        print("Keyword found,Image saved:" +
-                                              img_filename)
+                                        print(
+                                            "Keyword found,Image saved:" + img_filename
+                                        )
                                         textPad_insert(
-                                            "Keyword found,Image saved:"+img_filename)
+                                            "Keyword found,Image saved:" + img_filename
+                                        )
                                     except Exception as e:
-                                        print("Image Compress Failed."+str(e))
+                                        print("Image Compress Failed." + str(e))
                                         textPad_insert(
-                                            "Image Compress Failed."+str(e))
+                                            "Image Compress Failed." + str(e)
+                                        )
 
                                 # print("Alert Word Found: ", word)
                                 pos_to_mid = [
-                                    (words[0][0][0]+words[0][1][0])/2, (words[0][0][1]+words[0][2][1])/2]
+                                    (words[0][0][0] + words[0][1][0]) / 2,
+                                    (words[0][0][1] + words[0][2][1]) / 2,
+                                ]
+                                # e行PC模式：如果裁剪区域有效，检查关键字坐标是否在裁剪区域内，排除侧边栏等无关区域
+                                if conf_app_name == "e行PC" and crop_region is not None:
+                                    crop_x, crop_y, crop_w, crop_h = crop_region
+                                    if not (
+                                        crop_x <= pos_to_mid[0] <= crop_x + crop_w
+                                        and crop_y <= pos_to_mid[1] <= crop_y + crop_h
+                                    ):
+                                        print(
+                                            f"关键字 '{word}' 在裁剪区域外，已跳过 (pos={pos_to_mid}, crop=({crop_x},{crop_y},{crop_w},{crop_h}))"
+                                        )
+                                        textPad_insert(
+                                            f"关键字 '{word}' 在裁剪区域外，已跳过"
+                                        )
+                                        continue
                                 # 检查是否有特征像素
-                                square = [words[0][0][0], words[0][0][1], words[0][2]
-                                          [0]-words[0][0][0], words[0][2][1]-words[0][0][1]]
+                                square = [
+                                    words[0][0][0],
+                                    words[0][0][1],
+                                    words[0][2][0] - words[0][0][0],
+                                    words[0][2][1] - words[0][0][1],
+                                ]
                                 # print("Square: ", square)
                                 # print(image)
                                 pixel_char_count = 0
-                                roi = image[int(square[1]):int(
-                                    square[1]+square[3]), int(square[0]):int(square[0]+square[2])]
-                                '''
+                                roi = image[
+                                    int(square[1]) : int(square[1] + square[3]),
+                                    int(square[0]) : int(square[0] + square[2]),
+                                ]
+                                """
                                 for row in roi:
                                     for pixel in row:
                                         # 现在pixel是一个一维数组（三个元素）
@@ -1159,16 +1316,20 @@ def check_screen():
                                                     "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
                                                 alert_found = True
                                                 break
-                                '''
+                                """
                                 # HDe行pc 接收 e8e8e9 发送 c9e7ff
                                 # HDe行android 接收 ffffff 发送 c9e7ff
                                 # 蓝信 接收FFFFFF 发送 6392ed
                                 # 判断每个像素是否所有通道都<=80
                                 # 得到二维布尔数组，每个元素表示该像素是否所有通道<=80
-                                if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
+                                if (
+                                    conf_app_name == "蓝信"
+                                ):  # 蓝信接收到的文字为黑色，判断黑色像素数量
                                     char_pixels = (roi <= 80).all(axis=2)
                                     char_num = 20
-                                elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色 (#E4E4E5)，判断灰白像素数量
+                                elif (
+                                    conf_app_name == "e行PC"
+                                ):  # HDe行接收到的文字为背景为灰白色 (#E4E4E5)，判断灰白像素数量
 
                                     char_pixels = (roi >= 228).all(axis=2)
                                     char_num = 60
@@ -1177,18 +1338,32 @@ def check_screen():
                                     char_num = 60
                                 pixel_char_count = char_pixels.sum()
                                 textPad_insert(
-                                    "Conf App Name: "+conf_app_name+" , pixel_char_count:"+str(pixel_char_count))
+                                    "Conf App Name: "
+                                    + conf_app_name
+                                    + " , pixel_char_count:"
+                                    + str(pixel_char_count)
+                                )
                                 if pixel_char_count > char_num:
                                     alert_found = True
-                                    print("Alert Word Found: ", word, " at position: ",
-                                          pos_to_mid, " with dark pixel count: ", pixel_char_count)
+                                    print(
+                                        "Alert Word Found: ",
+                                        word,
+                                        " at position: ",
+                                        pos_to_mid,
+                                        " with dark pixel count: ",
+                                        pixel_char_count,
+                                    )
                                     textPad_insert(
-                                        "Alert Word Found: "+word+" at position: "+str(pos_to_mid))
-                                '''
+                                        "Alert Word Found: "
+                                        + word
+                                        + " at position: "
+                                        + str(pos_to_mid)
+                                    )
+                                """
                                 print("Alert Word Found: ", word, " at position: ", pos_to_mid)
                                 alert_found = True
                                 break
-                                '''
+                                """
                             if alert_found == True:
                                 if word in alert_msg:
                                     alert_found = False
@@ -1221,8 +1396,8 @@ def check_screen():
                     try:
                         click_unread_msg(pos)
                     except Exception as e:
-                        print("Mouse Click Error."+str(e))
-                        textPad_insert("Mouse Click Error."+str(e))
+                        print("Mouse Click Error." + str(e))
+                        textPad_insert("Mouse Click Error." + str(e))
         if alert_found == True:
             word = word.strip()
             print("ALerT Word FOUND!!!ALLLERRRRRTTTTT", word)
@@ -1237,7 +1412,7 @@ def check_screen():
                 alert_msg.append(word)
                 contents = word
                 if auto_reply == True and pos_to_mid != [0, 0]:
-                    print('position x y to click: ', pos_to_mid)
+                    print("position x y to click: ", pos_to_mid)
                     # '''
                     if conf_app_name == "蓝信":  # 蓝信
                         y_offset = 50
@@ -1248,80 +1423,112 @@ def check_screen():
                         if conf_app_name == "蓝信":
                             pyautogui.click(
                                 # 右键点击关键字文本
-                                pos_to_mid[0], pos_to_mid[1], button="right")
+                                pos_to_mid[0],
+                                pos_to_mid[1],
+                                button="right",
+                            )
                             time.sleep(1)
                             pyautogui.click(
                                 # 左键点击菜单项
-                                pos_to_mid[0]+50, pos_to_mid[1]+y_offset, button="left")
-                        elif conf_app_name == "e行PC":  # e行PC，类似e行安卓，长按弹出菜单
+                                pos_to_mid[0] + 50,
+                                pos_to_mid[1] + y_offset,
+                                button="left",
+                            )
+                        elif (
+                            conf_app_name == "e行PC"
+                        ):  # e行PC，类似e行安卓，长按弹出菜单
                             pyautogui.click(
-                                pos_to_mid[0], pos_to_mid[1], button="right")
+                                pos_to_mid[0], pos_to_mid[1], button="right"
+                            )
                             time.sleep(1)
-                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_pc.png")
+                            quota_image = get_resource_path_dpi(
+                                "./resources/image/quota_hdex_pc.png"
+                            )
                             try:
                                 location_q = pyautogui.locateOnScreen(
-                                    quota_image, confidence=0.8)
+                                    quota_image, confidence=0.8
+                                )
                             except pyautogui.ImageNotFoundException:
                                 location_q = None
                             if location_q:
-                                print('图片位置:', location_q)
+                                print("图片位置:", location_q)
                                 pyautogui.click(
-                                    location_q[0]+20, location_q[1]+25, button="left")
+                                    location_q[0] + 20,
+                                    location_q[1] + 25,
+                                    button="left",
+                                )
                             else:
-                                print('未找到quota_hdex_pc.png')
-                                textPad_insert('未找到quota_hdex_pc.png')
+                                print("未找到quota_hdex_pc.png")
+                                textPad_insert("未找到quota_hdex_pc.png")
                         else:  # e行安卓，长按弹出菜单
                             # 移动鼠标到指定位置
-                            pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1]+30)
+                            pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1] + 30)
                             textPad_insert(
-                                '移动鼠标到指定位置:'+str(pos_to_mid[0])+','+str(pos_to_mid[1]+30))
+                                "移动鼠标到指定位置:"
+                                + str(pos_to_mid[0])
+                                + ","
+                                + str(pos_to_mid[1] + 30)
+                            )
                             # 按下鼠标左键
-                            pyautogui.mouseDown(button='left')
+                            pyautogui.mouseDown(button="left")
 
                             # 等待一段时间，模拟长按效果
                             time.sleep(2.5)  # 例如，长按2秒
 
                             # 释放鼠标左键
-                            pyautogui.mouseUp(button='left')
+                            pyautogui.mouseUp(button="left")
 
                             time.sleep(1)
-                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_android.png")
+                            quota_image = get_resource_path_dpi(
+                                "./resources/image/quota_hdex_android.png"
+                            )
                             try:
                                 location_q = pyautogui.locateOnScreen(
-                                    quota_image, confidence=0.8)  # 查找按钮图标
+                                    quota_image, confidence=0.8
+                                )  # 查找按钮图标
                             except pyautogui.ImageNotFoundException:
                                 location_q = None
                             if location_q:
-                                print('图片位置:', location_q)
+                                print("图片位置:", location_q)
                                 pyautogui.click(
                                     # 点击输入框
-                                    location_q[0]+20, location_q[1]+25, button="left")
+                                    location_q[0] + 20,
+                                    location_q[1] + 25,
+                                    button="left",
+                                )
                     else:  # fullscreen == "no" 只对蓝信/e行PC有效
                         # 在当前活动窗口内点击
                         if conf_app_name == "蓝信":
-                            click_in_window(
-                                pos_to_mid[0], pos_to_mid[1], "right")
+                            click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
                             time.sleep(1)
                             # 点击当前活动窗口内的相对坐标位置
                             click_in_window(
-                                pos_to_mid[0]+50, pos_to_mid[1]+y_offset, "left")
-                        elif conf_app_name == "e行PC":  # e行PC，右键弹出菜单后通过图片定位点击输入框
-                            click_in_window(
-                                pos_to_mid[0], pos_to_mid[1], "right")
+                                pos_to_mid[0] + 50, pos_to_mid[1] + y_offset, "left"
+                            )
+                        elif (
+                            conf_app_name == "e行PC"
+                        ):  # e行PC，右键弹出菜单后通过图片定位点击输入框
+                            click_in_window(pos_to_mid[0], pos_to_mid[1], "right")
                             time.sleep(1)
-                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_pc.png")
+                            quota_image = get_resource_path_dpi(
+                                "./resources/image/quota_hdex_pc.png"
+                            )
                             try:
                                 location_q = pyautogui.locateOnScreen(
-                                    quota_image, confidence=0.8)
+                                    quota_image, confidence=0.8
+                                )
                             except pyautogui.ImageNotFoundException:
                                 location_q = None
                             if location_q:
-                                print('图片位置:', location_q)
+                                print("图片位置:", location_q)
                                 pyautogui.click(
-                                    location_q[0]+20, location_q[1]+25, button="left")
+                                    location_q[0] + 20,
+                                    location_q[1] + 25,
+                                    button="left",
+                                )
                             else:
-                                print('未找到quota_hdex_pc.png')
-                                textPad_insert('未找到quota_hdex_pc.png')
+                                print("未找到quota_hdex_pc.png")
+                                textPad_insert("未找到quota_hdex_pc.png")
                         else:  # e行安卓
                             active_win = pyautogui.getActiveWindow()
 
@@ -1330,36 +1537,47 @@ def check_screen():
                                 return
 
                             print(
-                                f"活动窗口信息: {active_win.title} | 大小: {active_win.size} | 位置: {active_win.topleft}")
+                                f"活动窗口信息: {active_win.title} | 大小: {active_win.size} | 位置: {active_win.topleft}"
+                            )
 
                             # 计算绝对坐标 (窗口位置 + 相对位置)
                             absolute_x = active_win.left + pos_to_mid[0]
                             absolute_y = active_win.top + pos_to_mid[1]
                             pyautogui.moveTo(absolute_x, absolute_y)
                             textPad_insert(
-                                '移动鼠标到指定位置:'+str(absolute_x)+','+str(absolute_y))
+                                "移动鼠标到指定位置:"
+                                + str(absolute_x)
+                                + ","
+                                + str(absolute_y)
+                            )
 
                             # 按下鼠标左键
-                            pyautogui.mouseDown(button='left')
+                            pyautogui.mouseDown(button="left")
 
                             # 等待一段时间，模拟长按效果
                             time.sleep(2.5)  # 例如，长按2秒
 
                             # 释放鼠标左键
-                            pyautogui.mouseUp(button='left')
+                            pyautogui.mouseUp(button="left")
 
                             time.sleep(1)
-                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_android.png")
+                            quota_image = get_resource_path_dpi(
+                                "./resources/image/quota_hdex_android.png"
+                            )
                             try:
                                 location_q = pyautogui.locateOnScreen(
-                                    quota_image, confidence=0.8)  # 查找按钮图标
+                                    quota_image, confidence=0.8
+                                )  # 查找按钮图标
                             except pyautogui.ImageNotFoundException:
                                 location_q = None
                             if location_q:
-                                print('图片位置:', location_q)
+                                print("图片位置:", location_q)
                                 pyautogui.click(
                                     # 点击输入框
-                                    location_q[0], location_q[1], button="left")
+                                    location_q[0],
+                                    location_q[1],
+                                    button="left",
+                                )
                     # '''
                     time.sleep(0.5)
                     # '''
@@ -1367,74 +1585,95 @@ def check_screen():
                     try:
                         # 查找图片位置
                         if conf_app_name == "蓝信":  # 蓝信
-                            toolbar_image = get_resource_path_dpi("./resources/image/toolbar_lx.png")
+                            toolbar_image = get_resource_path_dpi(
+                                "./resources/image/toolbar_lx.png"
+                            )
                             x_offset = 0
                             y_offset = 80
                         elif conf_app_name == "e行PC":  # HDe行
-                            toolbar_image = get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png")
+                            toolbar_image = get_resource_path_dpi(
+                                "./resources/image/toolbar_hdex_pc.png"
+                            )
                             x_offset = 0
                             y_offset = 80
                         else:  # e行安卓
-                            toolbar_image = get_resource_path_dpi("./resources/image/toolbar_hdex_android.png")
+                            toolbar_image = get_resource_path_dpi(
+                                "./resources/image/toolbar_hdex_android.png"
+                            )
                             x_offset = 100
                             y_offset = 20
                         location = pyautogui.locateOnScreen(
-                            toolbar_image, confidence=0.8)  # 查找按钮图标
+                            toolbar_image, confidence=0.8
+                        )  # 查找按钮图标
                         if location:
-                            print('图片位置:', location)
+                            print("图片位置:", location)
                             pyautogui.click(
                                 # 点击输入框
-                                location[0]+x_offset, location[1]+y_offset, button="left")
+                                location[0] + x_offset,
+                                location[1] + y_offset,
+                                button="left",
+                            )
                             if conf_app_name == "蓝信":  # 蓝信
                                 pass
                             elif conf_app_name == "e行PC":  # HDe行
                                 # 因引文在文本框上部，靠近toolbar，按下向下键，避免选中引文
-                                keyboard.press_and_release('down')
+                                keyboard.press_and_release("down")
                             else:  # e行安卓
                                 pass
                         else:
-                            print('未找到图片')
+                            print("未找到图片")
                     except pyautogui.ImageNotFoundException:
-                        print('未找到图片')
+                        print("未找到图片")
                     # 点击输入框，不是必须 ====end
                     time.sleep(0.5)
                     keyboard.write(auto_reply_text)  # 输入自动回复内容
 
                     wait_time_random = False  # 是否等待随机时间
                     if wait_time_random == True:
-                        wait_time = random.randint(0, 10)+0.5  # 生成随机数
+                        wait_time = random.randint(0, 10) + 0.5  # 生成随机数
                     else:
                         wait_time = 0.5
-                    textPad_insert("Wait Time: "+str(wait_time))
+                    textPad_insert("Wait Time: " + str(wait_time))
                     time.sleep(wait_time)  # 等待发送按钮出现
-                    if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC
-                        pyautogui.press('enter')
+                    if (
+                        conf_app_name == "蓝信" or conf_app_name == "e行PC"
+                    ):  # 蓝信/e行PC
+                        pyautogui.press("enter")
                     else:  # e行安卓
-                        send_button_image = get_resource_path_dpi("./resources/image/send_button_hdex_android.png")
+                        send_button_image = get_resource_path_dpi(
+                            "./resources/image/send_button_hdex_android.png"
+                        )
                         try:
                             location = pyautogui.locateOnScreen(
-                                send_button_image, confidence=0.7)  # 查找按钮图标
+                                send_button_image, confidence=0.7
+                            )  # 查找按钮图标
                             if location:
-                                print('图片位置:', location)
+                                print("图片位置:", location)
                                 pyautogui.click(
                                     # 点击输入框
-                                    location[0]+30, location[1]+20, button="left")
+                                    location[0] + 30,
+                                    location[1] + 20,
+                                    button="left",
+                                )
                         except pyautogui.ImageNotFoundException:
-                            print('未找到图片')
-                            textPad_insert('未找到发送按钮图片，可能是屏幕分辨率不匹配，请检查资源图片。')
+                            print("未找到图片")
+                            textPad_insert(
+                                "未找到发送按钮图片，可能是屏幕分辨率不匹配，请检查资源图片。"
+                            )
                     time.sleep(0.5)
                 if send_image == True:
                     import io
+
                     output = io.BytesIO()
                     image = Image.fromarray(image)
                     image = compress_image(
-                        image, target_width=1280, target_height=800, quality=85)
-                    image.save(output, format='JPEG')
+                        image, target_width=1280, target_height=800, quality=85
+                    )
+                    image.save(output, format="JPEG")
                     image_data = output.getvalue()
 
                     img_base64 = base64.b64encode(image_data).decode()
-                    img_md5 = hashlib.md5(
-                        img_base64.encode('utf-8')).hexdigest()
+                    img_md5 = hashlib.md5(img_base64.encode("utf-8")).hexdigest()
                     if img_md5 not in img_md5_list:
                         img_md5_list.append(img_md5)
                     else:
@@ -1442,16 +1681,17 @@ def check_screen():
                         textPad_insert("Same Image Sent Already, Skip")
                         return
                     img_base64 = "data:image/jpeg;base64," + img_base64
-                    contents = contents + "<br><img src='"+img_base64+"'>"
+                    contents = contents + "<br><img src='" + img_base64 + "'>"
                 if send_image_file == True:
-                    img_filename = "ImgTextOCR-img-" + \
-                        get_curtime("%Y%m%d%H%M%S") + ".jpg"
+                    img_filename = (
+                        "ImgTextOCR-img-" + get_curtime("%Y%m%d%H%M%S") + ".jpg"
+                    )
                     image.save(img_filename)
                     if conf_serial:
                         serial_send("file", img_filename)
 
                 if send_fulltext == True:  # 发送全文识别结果
-                    contents = contents + "<br>"+str(ocr_resp)
+                    contents = contents + "<br>" + str(ocr_resp)
 
                 if send_seprate == True:  # 根据联系人组分组发送消息
                     if last_sent_seprate != contents:
@@ -1460,10 +1700,7 @@ def check_screen():
                 else:  # 不分组发送消息
                     if conf_wxmsg:
                         if micromsg_method == "local":
-                            message = {
-                                "content": contents,
-                                "touser": wxmsg_touser
-                            }
+                            message = {"content": contents, "touser": wxmsg_touser}
 
                             message_queue.put(message)
                         elif micromsg_method == "server":
@@ -1488,7 +1725,7 @@ def check_screen():
             try:
                 newmsg_loc = pyautogui.locateOnScreen(
                     get_resource_path_dpi("./resources/image/newmsg_hdex_pc.png"),
-                    confidence=0.8
+                    confidence=0.8,
                 )
                 if newmsg_loc is not None:
                     print("e行PC新消息滚动按钮已定位，点击滚动到最新消息")
@@ -1496,19 +1733,19 @@ def check_screen():
                     pyautogui.click(
                         newmsg_loc.left + newmsg_loc.width // 2,
                         newmsg_loc.top + newmsg_loc.height // 2,
-                        button='left'
+                        button="left",
                     )
             except Exception as e:
                 print(f"e行PC新消息滚动按钮检测失败: {e}")
                 textPad_insert(f"e行PC新消息滚动按钮检测失败: {e}")
     except Exception as e:
-        print("Error in WatchDog: "+str(e))
-        textPad_insert("Error in WatchDog: "+str(e))
+        print("Error in WatchDog: " + str(e))
+        textPad_insert("Error in WatchDog: " + str(e))
         loguru.logger.exception("Error in WatchDog")
         if conf_email:
             send_email(
                 "ALERTonScreen Error",
-                "Error in WatchDog: "+str(e),
+                "Error in WatchDog: " + str(e),
                 email_receivers,
                 smtp_host,
                 smtp_port,
@@ -1527,7 +1764,12 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
     if send_to_default:
         # 使用配置文件中的接收邮箱和微信用户
         if conf_email:
-            if email_receivers == [] or email_receivers == None or email_receivers == [""] or email_receivers == "":
+            if (
+                email_receivers == []
+                or email_receivers == None
+                or email_receivers == [""]
+                or email_receivers == ""
+            ):
                 to_email = ""
             else:
                 # 默认发送到配置文件中的接收邮箱
@@ -1536,7 +1778,7 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                         if to_email == "":
                             to_email = email.strip()
                         else:
-                            to_email = to_email+","+email.strip()
+                            to_email = to_email + "," + email.strip()
         if conf_wxmsg:
             to_wx = wxmsg_touser
     else:
@@ -1552,12 +1794,11 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                 if to_email == "":
                     to_email = contacts[group][0].strip()
                 else:
-                    to_email = to_email+","+contacts[group][0].strip()
+                    to_email = to_email + "," + contacts[group][0].strip()
                 if to_wx == "":
                     to_wx = contacts[group][1].strip().replace(",", "|")
                 else:
-                    to_wx = to_wx+"|" + \
-                        contacts[group][1].strip().replace(",", "|")
+                    to_wx = to_wx + "|" + contacts[group][1].strip().replace(",", "|")
 
     elif ocr == "paddle" or ocr == "easyocr":
         for line in data:
@@ -1580,18 +1821,24 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                                     if to_email == "":
                                         to_email = contacts[group][0].strip()
                                     else:
-                                        to_email = to_email+"," + \
-                                            contacts[group][0].strip()
+                                        to_email = (
+                                            to_email + "," + contacts[group][0].strip()
+                                        )
                                     if to_wx == "":
-                                        to_wx = contacts[group][1].strip().replace(
-                                            ",", "|")
+                                        to_wx = (
+                                            contacts[group][1].strip().replace(",", "|")
+                                        )
                                     else:
-                                        to_wx = to_wx+"|" + \
-                                            contacts[group][1].strip().replace(
-                                                ",", "|")
+                                        to_wx = (
+                                            to_wx
+                                            + "|"
+                                            + contacts[group][1]
+                                            .strip()
+                                            .replace(",", "|")
+                                        )
                                 except Exception as e:
-                                    print("Error in contacts: "+str(e))
-                                    textPad_insert("Error in contacts: "+str(e))
+                                    print("Error in contacts: " + str(e))
+                                    textPad_insert("Error in contacts: " + str(e))
                                     continue
                     # 关键词分别发送对应联系人
                     for alert_word in alert_words:
@@ -1604,18 +1851,20 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                                 if to_email == "":
                                     to_email = contacts[group][0].strip()
                                 else:
-                                    to_email = to_email+"," + \
-                                        contacts[group][0].strip()
+                                    to_email = (
+                                        to_email + "," + contacts[group][0].strip()
+                                    )
                                 if to_wx == "":
-                                    to_wx = contacts[group][1].strip().replace(
-                                        ",", "|")
+                                    to_wx = contacts[group][1].strip().replace(",", "|")
                                 else:
-                                    to_wx = to_wx+"|" + \
-                                        contacts[group][1].strip().replace(
-                                            ",", "|")
+                                    to_wx = (
+                                        to_wx
+                                        + "|"
+                                        + contacts[group][1].strip().replace(",", "|")
+                                    )
                             except Exception as e:
-                                print("Error in contacts: "+str(e))
-                                textPad_insert("Error in contacts: "+str(e))
+                                print("Error in contacts: " + str(e))
+                                textPad_insert("Error in contacts: " + str(e))
                                 continue
             elif ocr_method == "easyocr":
                 if ocr_detail == 1:
@@ -1632,16 +1881,18 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
                             if to_email == "":
                                 to_email = contacts[group][0].strip()
                             else:
-                                to_email = to_email+","+contacts[group][0].strip()
+                                to_email = to_email + "," + contacts[group][0].strip()
                             if to_wx == "":
-                                to_wx = contacts[group][1].strip().replace(
-                                    ",", "|")
+                                to_wx = contacts[group][1].strip().replace(",", "|")
                             else:
-                                to_wx = to_wx+"|" + \
-                                    contacts[group][1].strip().replace(",", "|")
+                                to_wx = (
+                                    to_wx
+                                    + "|"
+                                    + contacts[group][1].strip().replace(",", "|")
+                                )
                         except Exception as e:
-                            print("Error in contacts: "+str(e))
-                            textPad_insert("Error in contacts: "+str(e))
+                            print("Error in contacts: " + str(e))
+                            textPad_insert("Error in contacts: " + str(e))
                             continue
         pass
     else:
@@ -1650,31 +1901,34 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
     if conf_email:
         print(to_email)
         if "@" in to_email:
-            send_email("ALERTonScreen_s", contents, to_email, smtp_host,
-                       smtp_port, mail_user, mail_pass, sender_email, smtptype)
+            send_email(
+                "ALERTonScreen_s",
+                contents,
+                to_email,
+                smtp_host,
+                smtp_port,
+                mail_user,
+                mail_pass,
+                sender_email,
+                smtptype,
+            )
         else:
             print("No Email Address Found")
     if conf_wxmsg:
 
         if to_wx != "":
-                if micromsg_method == "local":
-                    message = {
-                        "content": contents,
-                        "touser": to_wx
-                    }
+            if micromsg_method == "local":
+                message = {"content": contents, "touser": to_wx}
 
-                    message_queue.put(message)
-                elif micromsg_method == "server":
-                    wxmsg(to_wx, contents)
+                message_queue.put(message)
+            elif micromsg_method == "server":
+                wxmsg(to_wx, contents)
         else:
             print("No Wxmsg Address")
     if conf_serial:
 
         content_b64 = base64.b64encode(contents.encode()).decode()
-        trans_data = {
-            "content": content_b64,
-            "tomail": to_email
-        }
+        trans_data = {"content": content_b64, "tomail": to_email}
         trans_data = str(trans_data)
         trans_data_b64 = base64.b64encode(trans_data.encode()).decode()
         serial_send("emb64", trans_data_b64)
@@ -1732,9 +1986,11 @@ class DepartmentValidator:
 
             if result.get("errcode") == 0:
                 self.valid_departments = {
-                    str(dept["id"]) for dept in result.get("department", [])}
+                    str(dept["id"]) for dept in result.get("department", [])
+                }
                 loguru.logger.info(
-                    f"已获取有效部门ID: {len(self.valid_departments)} 个")
+                    f"已获取有效部门ID: {len(self.valid_departments)} 个"
+                )
             else:
                 loguru.logger.error(f"获取部门列表失败: {result}")
         except Exception as e:
@@ -1752,7 +2008,8 @@ class DepartmentValidator:
             dept_ids = dept_ids.split("|")
 
         valid_ids = [
-            dept_id for dept_id in dept_ids if self.is_valid_department(dept_id)]
+            dept_id for dept_id in dept_ids if self.is_valid_department(dept_id)
+        ]
         return "|".join(valid_ids)
 
 
@@ -1763,7 +2020,8 @@ class MessageSender(threading.Thread):
         super().__init__()
         self.config = config
         self.token_manager = AccessTokenManager(
-            config["CORP_ID"], config["CORP_SECRET"])
+            config["CORP_ID"], config["CORP_SECRET"]
+        )
         self.department_validator = DepartmentValidator(self.token_manager)
         self.agent_id = config["AGENT_ID"]
 
@@ -1778,7 +2036,9 @@ class MessageSender(threading.Thread):
                 if not success:
                     time.sleep(30)
                     message_queue.put(message)
-                    loguru.logger.warning(f"消息发送失败，已重新入队: {message['reqid']}")
+                    loguru.logger.warning(
+                        f"消息发送失败，已重新入队: {message['reqid']}"
+                    )
                 else:
                     self.record_message(message)
 
@@ -1789,14 +2049,14 @@ class MessageSender(threading.Thread):
                 loguru.logger.exception("发送线程出错")
                 time.sleep(10)
 
-    def send_message(self, message, touser='', toparty=''):
+    def send_message(self, message, touser="", toparty=""):
         """发送消息到企业微信"""
         try:
             access_token = self.token_manager.get_token()
             send_msg_url = "https://qyapi.weixin.qq.com/cgi-bin/message/send"
             params = {"access_token": access_token}
-            toparty = message['toparty'] if message['toparty'] else toparty
-            touser = message['touser'] if message['touser'] else touser
+            toparty = message["toparty"] if message["toparty"] else toparty
+            touser = message["touser"] if message["touser"] else touser
 
             payload = {
                 "touser": touser,
@@ -1804,11 +2064,12 @@ class MessageSender(threading.Thread):
                 "msgtype": "text",
                 "agentid": self.agent_id,
                 "text": {"content": message["content"]},
-                "safe": 0
+                "safe": 0,
             }
 
             response = requests.post(
-                send_msg_url, params=params, json=payload, timeout=10)
+                send_msg_url, params=params, json=payload, timeout=10
+            )
             result = response.json()
 
             if result.get("errcode") == 0:
@@ -1849,11 +2110,10 @@ def wxmsg(touser, content):
     # 发送微信消息 over http 中继服务器
     global secret_seed, wxmsg_url, wxmsg_method
     wechatdata = "touser=" + touser
-    content = urllib.parse.quote(content, encoding='utf-8')
+    content = urllib.parse.quote(content, encoding="utf-8")
     wechatdata = wechatdata + "&cont=[" + content + "]hvv-lx-msg"
 
-    secret = hashlib.md5(
-        (secret_seed + get_curtime("%Y%m%d")).encode()).hexdigest()
+    secret = hashlib.md5((secret_seed + get_curtime("%Y%m%d")).encode()).hexdigest()
     wechatdata = wechatdata + "&sec_msg_ret=" + secret
     try:
         if wxmsg_method == "GET":
@@ -1877,9 +2137,11 @@ def load_alert_words():
                 f"{ALERT_WORDS_FILE} not found, creating a new one,pls add alert words in it"
             )
             textPad_insert(
-                f"{ALERT_WORDS_FILE} not found, creating a new one,pls add alert words in it")
+                f"{ALERT_WORDS_FILE} not found, creating a new one,pls add alert words in it"
+            )
             f.write(
-                "# 监视-关键词1|联系人组名1\n监视-关键词2|联系人组名1\n监视-关键词3|联系人组名2\n监视-关键词4|联系人组名2\n")
+                "# 监视-关键词1|联系人组名1\n监视-关键词2|联系人组名1\n监视-关键词3|联系人组名2\n监视-关键词4|联系人组名2\n"
+            )
     with open(ALERT_WORDS_FILE, "r", encoding="utf-8") as f:
         words = f.readlines()
         # alert_words = [x.strip().split("|")[0] for x in words]
@@ -1902,7 +2164,9 @@ def load_contacts():
             print(
                 f"{CONTACT_FILE} not found, creating a new one,pls add email and wxmsg contacts in it"
             )
-            f.write("# 联系人组名1|邮箱1,邮箱2|微信1,微信2\n# 联系人组名2|邮箱1,邮箱2|微信1,微信2\n")
+            f.write(
+                "# 联系人组名1|邮箱1,邮箱2|微信1,微信2\n# 联系人组名2|邮箱1,邮箱2|微信1,微信2\n"
+            )
     with open(CONTACT_FILE, "r", encoding="utf-8") as f:
         contacts = f.readlines()
         for item in contacts:
@@ -1948,14 +2212,21 @@ def load_msg_groups():
                 if ip_start not in msg_group[group_name]:
                     msg_group[group_name].append(ip_start)
             elif net_mask == "16":
-                msg_group[group_name].append(ip_start.split(
-                    ".")[0]+"."+ip_start.split(".")[1]+".")
+                msg_group[group_name].append(
+                    ip_start.split(".")[0] + "." + ip_start.split(".")[1] + "."
+                )
             elif net_mask == "8":
-                msg_group[group_name].append(ip_start.split(".")[0]+".")
+                msg_group[group_name].append(ip_start.split(".")[0] + ".")
             elif int(net_mask) > 16 and int(net_mask) < 25:
-                for i in range(0, 2**(24-int(net_mask))):
-                    msg_group[group_name].append(ip_start.split(
-                        ".")[0]+"."+ip_start.split(".")[1]+"."+str(int(ip_start.split(".")[2])+i)+".")
+                for i in range(0, 2 ** (24 - int(net_mask))):
+                    msg_group[group_name].append(
+                        ip_start.split(".")[0]
+                        + "."
+                        + ip_start.split(".")[1]
+                        + "."
+                        + str(int(ip_start.split(".")[2]) + i)
+                        + "."
+                    )
             else:
                 msg_group[group_name].append(ip_start)
 
@@ -1967,7 +2238,7 @@ def check_uart_port():
     port_list = list(serial.tools.list_ports.comports())
     # print(port_list)
     if len(port_list) == 0:
-        print('can not find uart port')
+        print("can not find uart port")
         return False
     else:
         for i in range(0, len(port_list)):
@@ -1994,12 +2265,12 @@ def open_uart(port, bps, timeout):  # 打开串口
 
 def uart_send_data(uart, txbuf):  # 发送数据
     try:
-        len = uart.write(txbuf.encode('utf-8'))  # 写数据
+        len = uart.write(txbuf.encode("utf-8"))  # 写数据
         return len
     except:
         time.sleep(1)
         try:
-            len = uart.write(txbuf.encode('utf-8'))  # 写数据
+            len = uart.write(txbuf.encode("utf-8"))  # 写数据
             return len
         except Exception as result:
             print("Send Data Error.")
@@ -2007,17 +2278,20 @@ def uart_send_data(uart, txbuf):  # 发送数据
             loguru.logger.error(result)
             return 0
 
+
 # 关闭串口
 
 
 def close_uart(uart):  # 关闭串口
     uart.close()
 
+
 # 按长度分割字符串
 
 
 def split_string(s, n):
-    return [s[i:i+n] for i in range(0, len(s), n)]
+    return [s[i : i + n] for i in range(0, len(s), n)]
+
 
 # 串口发送数据(写入队列)
 
@@ -2027,6 +2301,7 @@ def serial_send(type, temp_data):
     if type == "email":
         temp_data = base64.b64encode(temp_data.encode()).decode()
     serial_queue.put([type, temp_data])
+
 
 # 串口守护线程(从队列中读取数据发送)
 
@@ -2040,6 +2315,7 @@ def serial_daemon():
         serial_data = serial_queue.get()
         serial_send_device(serial_data[0], serial_data[1])
 
+
 # 串口发送数据
 
 
@@ -2048,13 +2324,13 @@ def serial_send_device(type, temp_data):
     # 扫描端口
     # result = check_uart_port()
     result = True
-    if (result == False):
+    if result == False:
         return
 
     # 打开串口
-    port = serialdev.split(',')[0]
-    bps = int(serialdev.split(',')[1])
-    timeout = int(serialdev.split(',')[2])
+    port = serialdev.split(",")[0]
+    bps = int(serialdev.split(",")[1])
+    timeout = int(serialdev.split(",")[2])
 
     max_retries = 3
     retry_count = 0
@@ -2066,21 +2342,27 @@ def serial_send_device(type, temp_data):
             serial_opened = True
         except Exception as e:
             retry_count += 1
-            loguru.logger.error(f"Serial Open Error (尝试 {retry_count}/{max_retries}): {e}")
+            loguru.logger.error(
+                f"Serial Open Error (尝试 {retry_count}/{max_retries}): {e}"
+            )
             if retry_count >= max_retries:
-                loguru.logger.error(f"串口 {port} 打开失败已达最大重试次数，放弃本次发送")
+                loguru.logger.error(
+                    f"串口 {port} 打开失败已达最大重试次数，放弃本次发送"
+                )
                 print(f"串口 {port} 打开失败，已放弃发送")
                 textPad_insert(f"串口 {port} 打开失败，已放弃发送")
                 return
             time.sleep(1)
 
         # 定义YMODEM发送函数
+
     def send_ymodem(filename):
         def getc(size, timeout=1):
             return uart1.read(size)
 
         def putc(data, timeout=1):
             return uart1.write(data)
+
         modem = xmodem.XMODEM(getc, putc)
         with open(filename, "rb") as f:
             status = modem.send(f)
@@ -2102,27 +2384,47 @@ def serial_send_device(type, temp_data):
         # print(max_len)
 
         timestamp = hashlib.md5(
-            (str(int(time.time()))+temp_data).encode()).hexdigest()
+            (str(int(time.time())) + temp_data).encode()
+        ).hexdigest()
         index = 0
         for index in range(0, max_len):
             data_piece = str(temp_data_pieces[index])
             data_piece_hash = hashlib.md5(data_piece.encode()).hexdigest()
-            txbuf = '{"c":"'+type+'","index":"'+str(
-                index+1)+'","timestamp":"'+timestamp+'","num":"'+str(max_len)+'","data":"'+data_piece+'","hash":"'+data_piece_hash+'"}'
+            txbuf = (
+                '{"c":"'
+                + type
+                + '","index":"'
+                + str(index + 1)
+                + '","timestamp":"'
+                + timestamp
+                + '","num":"'
+                + str(max_len)
+                + '","data":"'
+                + data_piece
+                + '","hash":"'
+                + data_piece_hash
+                + '"}'
+            )
             try:
                 len = uart_send_data(uart1, txbuf)
                 print("Serial send len: ", len, ";data_hash:", data_piece_hash)
-                loguru.logger.info("Serial send len: " +
-                                   str(len)+";data_hash:"+data_piece_hash)
+                loguru.logger.info(
+                    "Serial send len: " + str(len) + ";data_hash:" + data_piece_hash
+                )
                 time.sleep(0.001)
                 pass
             except Exception as e:
-                loguru.logger.error("Serial send error."+str(e))
+                loguru.logger.error("Serial send error." + str(e))
 
     if type == "rt":
         for item in temp_data:
-            txbuf = '{"c":"rtd","iv":{"t":"' + \
-                str(item[0])+'","v":"'+str(item[1])+'\"}}'
+            txbuf = (
+                '{"c":"rtd","iv":{"t":"'
+                + str(item[0])
+                + '","v":"'
+                + str(item[1])
+                + '"}}'
+            )
             try:
                 len = uart_send_data(uart1, txbuf)
                 print("Serial send len: ", len, ";data:", txbuf)
@@ -2130,10 +2432,10 @@ def serial_send_device(type, temp_data):
                 pass
             except Exception as e:
                 # save_log('error', "Serial send error."+str(e))
-                loguru.logger.error("Serial send error."+str(e))
+                loguru.logger.error("Serial send error." + str(e))
     if type == "file":
         fn = (temp_data.replace("\\", "/").split("/"))[-1]
-        txbuf = '{"c":"f","fn":"'+fn+'","fs":""}'
+        txbuf = '{"c":"f","fn":"' + fn + '","fs":""}'
         try:
             len = uart_send_data(uart1, txbuf)
             print("Serial send len: ", len, ";data:", txbuf)
@@ -2149,7 +2451,7 @@ def serial_send_device(type, temp_data):
             pass
         except Exception as e:
             # save_log('error', "Serial send error."+str(e))
-            loguru.logger.error("Serial send error."+str(e))
+            loguru.logger.error("Serial send error." + str(e))
 
         pass
     for num in range(0, 3):
@@ -2161,6 +2463,8 @@ def serial_send_device(type, temp_data):
     pass
     close_uart(uart1)
     serial_opened = False
+
+
 # 准备配置文件
 
 
@@ -2220,6 +2524,7 @@ def prepare_conf_file(configpath):  # 准备配置文件
         config.write(open(configpath, "w"))
         pass
     pass
+
 
 # 读取配置文件-配置项
 
@@ -2293,12 +2598,16 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
 def schedule_load(interval):
     # 定时加载配置文件
     schedule.every(interval).seconds.do(check_screen)  # 每10秒执行一次，检查屏幕
-    schedule.every(60*20).seconds.do(clean_msg_store)  # 每20分执行一次，清除消息存储
+    schedule.every(60 * 20).seconds.do(clean_msg_store)  # 每20分执行一次，清除消息存储
     schedule.every(120).seconds.do(load_alert_words)  # 每120秒执行一次，加载关键词
     schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次，加载联系人
     schedule.every(3).seconds.do(run_play_music)  # 每3秒执行一次，播放报警音
-    schedule.every(60*30).seconds.do(send_email_ipchg)  # 每30分执行一次，检查IP变化并发送邮件
-    schedule.every(60*60).seconds.do(textPad_save_and_clear)  # 每60分执行一次，保存并清除文本编辑器内容
+    schedule.every(60 * 30).seconds.do(
+        send_email_ipchg
+    )  # 每30分执行一次，检查IP变化并发送邮件
+    schedule.every(60 * 60).seconds.do(
+        textPad_save_and_clear
+    )  # 每60分执行一次，保存并清除文本编辑器内容
 
 
 @new_thread
@@ -2319,7 +2628,11 @@ def daemon_worker():
             print("Daemon interval changed to: ", running_interval)
             # 重新加载定时任务
             schedule_load(running_interval)
-        while app_run == True and exit_flag.is_set() == False and running_interval == daemon_interval:
+        while (
+            app_run == True
+            and exit_flag.is_set() == False
+            and running_interval == daemon_interval
+        ):
             # print("Daemon running...")
             # 执行定时任务
             schedule.run_pending()
@@ -2336,7 +2649,7 @@ def quit_program():
         return
 
     exit_flag.set()  # 设置全局事件，通知线程退出
-    app_run = False   # 停止主循环
+    app_run = False  # 停止主循环
 
     # 先停止托盘图标
     if icon is not None:
@@ -2350,7 +2663,7 @@ def quit_program():
     try:
         with open("img_md5_list.txt", "w", encoding="utf-8") as f:
             for item in img_md5_list:
-                f.write(item+"\n")
+                f.write(item + "\n")
     except:
         pass
 
@@ -2364,7 +2677,7 @@ def quit_program():
 
     # 关闭tkinter主窗口
     try:
-        if 'root' in globals() and root is not None:
+        if "root" in globals() and root is not None:
             # 先销毁所有Tkinter变量
             for name, var in list(root.__dict__.items()):
                 if isinstance(var, (tk.Variable, tk.Widget)):
@@ -2406,22 +2719,20 @@ def splash_play():
     splash.configure(bg="gray99")  # 设置窗口背景色
 
     # 使用Canvas而不是Label来显示，提供更多控制
-    canvas = tk.Canvas(splash, bg="gray99",
-                       highlightthickness=0, width=width, height=height)
+    canvas = tk.Canvas(
+        splash, bg="gray99", highlightthickness=0, width=width, height=height
+    )
     canvas.pack(fill="both", expand=True)
 
     # 标题文本
     title_label = tk.Label(
-        canvas,
-        text=f"{prog_window_title}\n",
-        font=("黑体", 12),
-        bg="gray99"
+        canvas, text=f"{prog_window_title}\n", font=("黑体", 12), bg="gray99"
     )
-    canvas.create_window((width/2, 30), window=title_label)
+    canvas.create_window((width / 2, 30), window=title_label)
 
     # 创建动画容器（重要：使用Label代替Canvas创建图像）
     img_container = tk.Label(canvas, bg="gray99", bd=0)
-    canvas.create_window((width/2, height/2), window=img_container)
+    canvas.create_window((width / 2, height / 2), window=img_container)
 
     # 使用GIFLoader类加载GIF动画
     class GIFLoader:
@@ -2436,6 +2747,7 @@ def splash_play():
         def load_gif(self):
             try:
                 from PIL import Image, ImageTk, ImageSequence
+
                 with open(self.gif_path, "rb") as f:
                     gif = Image.open(f)
                     # 获取GIF的循环次数（非必需，但有助于精确控制）
@@ -2450,8 +2762,11 @@ def splash_play():
             except Exception as e:
                 # 加载失败时使用单帧图像
                 print(f"GIF加载出错: {e}")
-                img = ImageTk.PhotoImage(Image.open(
-                    get_resource_path("./resources/image/reload.gif")).resize((80, 80), Image.LANCZOS))
+                img = ImageTk.PhotoImage(
+                    Image.open(
+                        get_resource_path("./resources/image/reload.gif")
+                    ).resize((80, 80), Image.LANCZOS)
+                )
                 self.frames = [img]
 
         def play(self):
@@ -2470,12 +2785,9 @@ def splash_play():
 
     # 底部文本
     bottom_label = tk.Label(
-        canvas,
-        text="正在加载中，请稍后...",
-        font=("黑体", 12),
-        bg="gray99"
+        canvas, text="正在加载中，请稍后...", font=("黑体", 12), bg="gray99"
     )
-    canvas.create_window((width/2, height-30), window=bottom_label)
+    canvas.create_window((width / 2, height - 30), window=bottom_label)
 
     # 4秒后自动关闭
     def safe_destroy():
@@ -2489,6 +2801,7 @@ def splash_play():
     splash.lift()
     splash.update_idletasks()
 
+
 # ...（程序其余部分保持不变）...
 
 
@@ -2497,7 +2810,7 @@ def get_resource_path(relative_path):
         relative_path = relative_path[2:]
     relative_path = relative_path.replace("/", "\\")
     base_dir = ""
-    if hasattr(sys, '_MEIPASS'):
+    if hasattr(sys, "_MEIPASS"):
         base_dir = sys._MEIPASS
     else:
         base_dir = os.path.abspath(".")
@@ -2528,7 +2841,7 @@ def get_resource_path_dpi(relative_path):
     base_path = get_resource_path(relative_path)
 
     # 只对 resources/image 下的图片进行DPI适配
-    if 'resources\\image' not in base_path and 'resources/image' not in relative_path:
+    if "resources\\image" not in base_path and "resources/image" not in relative_path:
         return base_path
 
     scale = get_dpi_scale()
@@ -2575,10 +2888,14 @@ def systray(icon):
 def sw_console():
     global settings_window, sw_show
     # 确保主窗口存在
-    if 'root' in globals() and root is not None:
-        if not hasattr(tk, '_default_root') or not tk._default_root:
+    if "root" in globals() and root is not None:
+        if not hasattr(tk, "_default_root") or not tk._default_root:
             return
-        if settings_window == None or not tk._default_root or not settings_window.winfo_exists():
+        if (
+            settings_window == None
+            or not tk._default_root
+            or not settings_window.winfo_exists()
+        ):
             # 窗口不存在则创建
             settings_window = open_settings()
             sw_show = True  # 创建后显示
@@ -2592,6 +2909,8 @@ def sw_console():
                 settings_window.deiconify()
                 settings_window.focus_force()
                 sw_show = True
+
+
 # 修改3: 让open_settings返回创建的窗口
 
 
@@ -2599,7 +2918,7 @@ def open_settings():
     """显示设置窗口"""
     global settings_window, sw_show, textPad, volume_label, conf_volume, scaler_volume, bt3_1, bt3_2, bt3_3, bt3_4
     # 确保主窗口存在
-    if not hasattr(tk, '_default_root') or not tk._default_root:
+    if not hasattr(tk, "_default_root") or not tk._default_root:
         return None
     # 如果窗口已经存在，则直接显示
     if settings_window and settings_window.winfo_exists():
@@ -2608,7 +2927,7 @@ def open_settings():
         sw_show = True
         return settings_window
     # 确保 scaler_volume 已初始化
-    if not hasattr(scaler_volume, 'get'):
+    if not hasattr(scaler_volume, "get"):
         scaler_volume = tk.IntVar(value=conf_volume)
     # 创建新窗口
     settings_window = tk.Toplevel(root)
@@ -2617,14 +2936,15 @@ def open_settings():
     # 修改4: 窗口关闭时隐藏而非销毁
     settings_window.protocol("WM_DELETE_WINDOW", lambda: sw_console())
 
-    settings_window.iconbitmap(get_resource_path(
-        "./resources/image/reload.gif"))  # 设置窗口图标
+    settings_window.iconbitmap(
+        get_resource_path("./resources/image/reload.gif")
+    )  # 设置窗口图标
     screenWidth = settings_window.winfo_screenwidth()  # 获取显示区域的宽度
     screenHeight = settings_window.winfo_screenheight()  # 获取显示区域的高度
     width = 550  # 设定窗口宽度
     height = 500  # 设定窗口高度
-    left = (screenWidth - width-50)
-    top = (screenHeight - height-150)
+    left = screenWidth - width - 50
+    top = screenHeight - height - 150
 
     # 宽度x高度+x偏移+y偏移
     settings_window.geometry("%dx%d+%d+%d" % (width, height, left, top))
@@ -2646,57 +2966,58 @@ def open_settings():
     button_frame.pack(fill=tk.X, pady=5)
 
     label2 = tk.Label(button_frame, text="音量:").pack(side=tk.LEFT)
-    '''
+    """
     bt2_1 = tk.Button(button_frame, text="小", command=lambda: set_volume(0.2)).pack(side=tk.LEFT)
     bt2_2 = tk.Button(button_frame, text="中", command=lambda: set_volume(0.5)).pack(side=tk.LEFT)
     bt2_3 = tk.Button(button_frame, text="大", command=lambda: set_volume(1)).pack(side=tk.LEFT)
-    '''
+    """
     # 创建滑块组件
     slider = ttk.Scale(
         button_frame,
-        from_=0,       # 最小值
-        to=100,        # 最大值
+        from_=0,  # 最小值
+        to=100,  # 最大值
         orient=tk.HORIZONTAL,  # 水平方向
-        length=100,    # 滑块长度
+        length=100,  # 滑块长度
         command=set_volume,  # 值变化时的回调函数
-        variable=scaler_volume  # 绑定到变量
+        variable=scaler_volume,  # 绑定到变量
     )
     slider.pack(side=tk.LEFT, padx=5)
     set_volume(50)  # 设置初始音量为50%
     # 显示当前值的标签
     volume_label = ttk.Label(button_frame, text=f"{int(scaler_volume.get())}%")
     volume_label.pack(side=tk.LEFT, padx=5)
-    bt2 = tk.Button(button_frame, text="试",
-                    command=lambda: play_music(alert_mp3_file)).pack(side=tk.LEFT, padx=5)
+    bt2 = tk.Button(button_frame, text="试", command=play_test_sound).pack(
+        side=tk.LEFT, padx=5
+    )
     label3 = tk.Label(button_frame, text="监视间隔:").pack(side=tk.LEFT, padx=10)
-    bt3_1 = tk.Button(button_frame, text="5",
-                      command=lambda: set_daemon_interval(5))
+    bt3_1 = tk.Button(button_frame, text="5", command=lambda: set_daemon_interval(5))
     bt3_1.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
-    bt3_2 = tk.Button(button_frame, text="10",
-                      command=lambda: set_daemon_interval(10))
+    bt3_2 = tk.Button(button_frame, text="10", command=lambda: set_daemon_interval(10))
     bt3_2.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
-    bt3_3 = tk.Button(button_frame, text="15",
-                      command=lambda: set_daemon_interval(15))
+    bt3_3 = tk.Button(button_frame, text="15", command=lambda: set_daemon_interval(15))
     bt3_3.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
-    bt3_4 = tk.Button(button_frame, text="20",
-                      command=lambda: set_daemon_interval(20))
+    bt3_4 = tk.Button(button_frame, text="20", command=lambda: set_daemon_interval(20))
     bt3_4.pack(side=tk.LEFT, padx=2)  # 必须分行pack 否则会返回None导致无法调用按钮对象
     set_daemon_interval(daemon_interval)  # 设置初始监视间隔
     button_frame2 = tk.Frame(settings_window, bg="#f0f0f0")
     button_frame2.pack(fill=tk.X, pady=5)
     label4 = tk.Label(button_frame2, text="控制:").pack(side=tk.LEFT)
-    bt1 = tk.Button(button_frame2, text="启动监视!",
-                    command=lambda: set_daemon_permit("on")).pack(side=tk.LEFT)
-    bt2 = tk.Button(button_frame2, text="消音!", command=lambda: set_alert_permit(
-        "off")).pack(side=tk.LEFT)
-    bt3 = tk.Button(button_frame2, text="停止监视!", command=lambda: set_daemon_permit(
-        "off")).pack(side=tk.LEFT)
+    bt1 = tk.Button(
+        button_frame2, text="启动监视!", command=lambda: set_daemon_permit("on")
+    ).pack(side=tk.LEFT)
+    bt2 = tk.Button(
+        button_frame2, text="消音!", command=lambda: set_alert_permit("off")
+    ).pack(side=tk.LEFT)
+    bt3 = tk.Button(
+        button_frame2, text="停止监视!", command=lambda: set_daemon_permit("off")
+    ).pack(side=tk.LEFT)
     label4 = tk.Label(button_frame2, text=" ").pack(side=tk.LEFT)
-    bt4 = tk.Button(button_frame2, text="退出程序!",
-                    command=quit_program).pack(side=tk.LEFT)
+    bt4 = tk.Button(button_frame2, text="退出程序!", command=quit_program).pack(
+        side=tk.LEFT
+    )
 
-    settings_window.attributes('-topmost', True)
-    settings_window.after_idle(settings_window.attributes, '-topmost', False)
+    settings_window.attributes("-topmost", True)
+    settings_window.after_idle(settings_window.attributes, "-topmost", False)
     sw_show = True  # 新创建窗口时设为显示状态
 
     return settings_window  # 返回创建的窗口
@@ -2727,11 +3048,11 @@ def process_queue():
 
 
 if __name__ == "__main__":
-    prog_window_title = '桌面关键字监视器'
+    prog_window_title = "桌面关键字监视器"
     root = None  # 初始化tkinter主窗口
     root = tk.Tk()
     root.withdraw()  # 隐藏主窗口
-    splash = ''
+    splash = ""
     splash_play()
     # 读取配置文件-关键词分组
     msg_group = load_msg_groups()
@@ -2741,7 +3062,7 @@ if __name__ == "__main__":
     # 事件队列
     ui_queue = queue.Queue()
 
-    icon, textPad = '', ''
+    icon, textPad = "", ""
     try:
         w_title = "Screen OCR Watchdog"  # 控制台窗口标题 通过 title 命令在bat文件中设置
         w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
@@ -2750,13 +3071,19 @@ if __name__ == "__main__":
     except:
         pass
     import argparse
-    parser = argparse.ArgumentParser(description='桌面关键字监视器')
-    parser.add_argument('--UseSerial', type=str, default='no',
-                        required=False, help='是否启用串口发送功能')
+
+    parser = argparse.ArgumentParser(description="桌面关键字监视器")
+    parser.add_argument(
+        "--UseSerial",
+        type=str,
+        default="no",
+        required=False,
+        help="是否启用串口发送功能",
+    )
     # required = False 只能用于可选参数。 对于可选参数，应该使用 - -，如果没有 - -，python 会将其视为位置参数。
     args = parser.parse_args()
 
-    last_sent_seprate = ''
+    last_sent_seprate = ""
     alert_msg = []
     img_md5_list = []
     if os.path.exists("img_md5_list.txt") == True:
@@ -2765,37 +3092,54 @@ if __name__ == "__main__":
                 img_md5_list.append(line.strip())
     w_left, w_top = 0, 0
     debug = False
-    log_path = './logs'
+    log_path = "./logs"
     if not os.path.isdir(log_path):
         # 创建文件夹
         os.mkdir(log_path)
-    sheduler = loguru.logger.add(log_path+"\\padocr-watchdog.log", rotation="1 day", retention="7 days", level="INFO", encoding="utf-8"
-                                 )
+    sheduler = loguru.logger.add(
+        log_path + "\\padocr-watchdog.log",
+        rotation="1 day",
+        retention="7 days",
+        level="INFO",
+        encoding="utf-8",
+    )
     config = configparser.ConfigParser()  # 类实例化
 
     # 定义文件路径
     configpath = r".\setup.ini"
     prepare_conf_file(configpath)
-    daemon_interval, alert_mp3_file, conf_wxmsg, conf_email, ocr_method, ocr_detail, conf_app_name, window_title, conf_serial, send_snapshot, send_seprate, auto_reply, auto_reply_text = (
-        get_conf_from_file(
-            configpath,
-            "config",
-            [
-                "daemon_interval",
-                "alert_mp3_file",
-                "send_wxmsg",
-                "send_email",
-                "ocr_method",
-                "ocr_detail",
-                "app_name",
-                "window_title",
-                "send_serial",
-                "send_snapshot",
-                "send_seprate",
-                "auto_reply",
-                "auto_reply_text",
-            ],
-        )
+    (
+        daemon_interval,
+        alert_mp3_file,
+        conf_wxmsg,
+        conf_email,
+        ocr_method,
+        ocr_detail,
+        conf_app_name,
+        window_title,
+        conf_serial,
+        send_snapshot,
+        send_seprate,
+        auto_reply,
+        auto_reply_text,
+    ) = get_conf_from_file(
+        configpath,
+        "config",
+        [
+            "daemon_interval",
+            "alert_mp3_file",
+            "send_wxmsg",
+            "send_email",
+            "ocr_method",
+            "ocr_detail",
+            "app_name",
+            "window_title",
+            "send_serial",
+            "send_snapshot",
+            "send_seprate",
+            "auto_reply",
+            "auto_reply_text",
+        ],
     )
     if conf_app_name == "e行pc" or conf_app_name == "e行PC":
         window_title = "华电e行"
@@ -2872,29 +3216,37 @@ if __name__ == "__main__":
         email_queue = queue.Queue()
         process_email_queue(email_queue)
     if conf_wxmsg == True:
-        micromsg_method, corp_id, corp_secret, agent_id, wxmsg_url_get, wxmsg_url_post, wxmsg_method, secret_seed, wxmsg_touser = (
-            get_conf_from_file(
-                configpath,
-                "micromsg",
-                [
-                    "method",
-                    "CORP_ID",
-                    "CORP_SECRET",
-                    "AGENT_ID",
-                    "wxmsg_url_get",
-                    "wxmsg_url_post",
-                    "wxmsg_method",
-                    "secret_seed",
-                    "wxmsg_touser",
-                ],
-            )
+        (
+            micromsg_method,
+            corp_id,
+            corp_secret,
+            agent_id,
+            wxmsg_url_get,
+            wxmsg_url_post,
+            wxmsg_method,
+            secret_seed,
+            wxmsg_touser,
+        ) = get_conf_from_file(
+            configpath,
+            "micromsg",
+            [
+                "method",
+                "CORP_ID",
+                "CORP_SECRET",
+                "AGENT_ID",
+                "wxmsg_url_get",
+                "wxmsg_url_post",
+                "wxmsg_method",
+                "secret_seed",
+                "wxmsg_touser",
+            ],
         )
         if micromsg_method == "local":
             message_queue = queue.Queue()
             wxlocal_config = {
                 "CORP_ID": corp_id,
                 "CORP_SECRET": corp_secret,
-                "AGENT_ID": agent_id
+                "AGENT_ID": agent_id,
             }
             sender_thread = MessageSender(wxlocal_config)
             sender_thread.daemon = True
@@ -2903,7 +3255,8 @@ if __name__ == "__main__":
             pass
         else:
             loguru.logger.error(
-                "micromsg_method must be 'local' or 'server',please check your config file.")
+                "micromsg_method must be 'local' or 'server',please check your config file."
+            )
         if wxmsg_method == "GET":
             wxmsg_url = wxmsg_url_get
         else:
@@ -2912,8 +3265,8 @@ if __name__ == "__main__":
         import serial
         import serial.tools.list_ports
         import xmodem
-        serialdev = get_conf_from_file(
-            configpath, 'serial', ['serialdev_in'])
+
+        serialdev = get_conf_from_file(configpath, "serial", ["serialdev_in"])
 
         serial_opened = False
 
@@ -2934,10 +3287,14 @@ if __name__ == "__main__":
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("控制台", sw_console),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("退出", quit_program)
+        pystray.MenuItem("退出", quit_program),
     )
-    icon = pystray.Icon(name="桌面关键字监视器", icon=Image.open(
-        get_resource_path("./resources/image/reload.gif")), menu=menu_options, on_quit=quit_program)
+    icon = pystray.Icon(
+        name="桌面关键字监视器",
+        icon=Image.open(get_resource_path("./resources/image/reload.gif")),
+        menu=menu_options,
+        on_quit=quit_program,
+    )
 
     systray(icon)
     """创建隐藏的tkinter主窗口"""
@@ -2974,5 +3331,5 @@ if __name__ == "__main__":
         time.sleep(0.1)
 
     # 显式停止托盘图标
-    if icon and hasattr(icon, 'stop'):
+    if icon and hasattr(icon, "stop"):
         icon.stop()

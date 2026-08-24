@@ -6,6 +6,7 @@ ffmpeg-*/
 *.zip
 *.rar
 backup/
+backup*/
 paddleocr/
 paddleocr1/
 screenshots/
