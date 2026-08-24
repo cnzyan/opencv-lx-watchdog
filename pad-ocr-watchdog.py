@@ -33,18 +33,8 @@ import queue
 
 # to fix OSError: [WinError 127] 找不到指定的程序。 Error loading "C:\Users\cnzya\AppData\Roaming\Python\Python313\site-packages\torch\lib\shm.dll" or one of its dependencies.
 import torch
-
 # fix end
-import ctypes
-
-# 设置DPI感知，确保窗口坐标和屏幕坐标使用一致的物理像素
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # Windows 8.1+
-except Exception:
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()  # Windows 7/8
-    except Exception:
-        pass
+# DPI感知由pyscreeze内部自动处理，不需要手动设置
 requests.packages.urllib3.disable_warnings()
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 允许 Intel AI OpenMP 库的重复加载
 # .venv\Scripts\Activate.ps1
@@ -583,7 +573,7 @@ def ocr_img_text(
         image = numpy.array(image)
     elif isinstance(image, numpy.ndarray):
         # 已经是numpy数组，直接使用
-        pass
+        fullscreen = "no"
     else:
         image = numpy.array(image)
     if engine == "paddle":
@@ -679,6 +669,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
     截图
     :return:Image
     """
+    fullscreen = "no"
 
     def active_window(w_title):
         windows = pygetwindow.getWindowsWithTitle(w_title)
@@ -1023,14 +1014,19 @@ def check_screen():
         # e行PC模式下，使用三张定位图片裁剪有效检测区域（排除标题栏、侧边栏和工具栏）
         crop_region = None
         if conf_app_name == "e行PC":
+            dpi_scale = get_dpi_scale()
+            print(f"当前系统DPI缩放倍率: {dpi_scale:.2f}x (DPI: {int(dpi_scale * 96)})")
+            textPad_insert(f"当前系统DPI缩放倍率: {dpi_scale:.2f}x")
             try:
                 # 定位左侧边缘图：取其最右下坐标作为裁剪左边界
                 try:
+                    left_path = get_resource_path_dpi(
+                        "./resources/image/left_edge_hdex_pc.png"
+                    )
+                    print(f"使用定位图片: {left_path}")
                     left_loc = pyautogui.locateOnScreen(
-                        get_resource_path_dpi(
-                            "./resources/image/left_edge_hdex_pc.png"
-                        ),
-                        confidence=0.8,
+                        left_path,
+                        confidence=0.7,
                         region=(w_left, w_top, 200, 800),  # 仅在窗口左侧区域搜索
                     )
                 except pyautogui.ImageNotFoundException:
@@ -1041,7 +1037,7 @@ def check_screen():
                         get_resource_path_dpi(
                             "./resources/image/rightup_edge_hdex_pc.png"
                         ),
-                        confidence=0.8,
+                        confidence=0.7,
                         region=(w_left + 500, w_top, 400, 600),  # 仅在窗口右侧区域搜索
                     )
                 except pyautogui.ImageNotFoundException:
@@ -1050,29 +1046,49 @@ def check_screen():
                 try:
                     toolbar_loc = pyautogui.locateOnScreen(
                         get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png"),
-                        confidence=0.8,
+                        confidence=0.7,
                         region=(w_left, w_top, 800, 200),  # 仅在窗口顶部区域搜索
                     )
                 except pyautogui.ImageNotFoundException:
                     toolbar_loc = None
-                if left_loc and right_loc and toolbar_loc:
-                    crop_left = left_loc.left + left_loc.width  # 左图最右下x
-                    crop_right = right_loc.left  # 右上图最左下x
-                    crop_bottom = (
-                        toolbar_loc.top
-                    )  # 工具栏最上坐标作为裁剪下边界（保留其上方的聊天内容）
-                    # 裁剪区域相对于窗口（screenshot区域）的坐标
+                # 分别处理每个定位结果：找到的图片约束对应边界，未找到的不做限制
+                # 左边界：找到左侧边缘图则取其最右下x，否则取0
+                if left_loc:
+                    crop_left = left_loc.left + left_loc.width
+                else:
+                    crop_left = 0
+                    print("未找到left_edge_hdex_pc.png，左边界不裁剪")
+                # 右边界：找到右上边缘图则取其最左下x，否则取图像右边界（后续由图像宽度决定）
+                if right_loc:
+                    crop_right = right_loc.left
+                else:
+                    crop_right = None  # 标记为未找到，后续用图像宽度
+                    print("未找到rightup_edge_hdex_pc.png，右边界不裁剪")
+                # 下边界：找到工具栏图则取其最上y，否则取图像下边界
+                if toolbar_loc:
+                    crop_bottom = toolbar_loc.top
+                else:
+                    crop_bottom = None  # 标记为未找到，后续用图像高度
+                    print("未找到toolbar_hdex_pc.png，下边界不裁剪")
+
+                if left_loc or right_loc or toolbar_loc:
+                    # 至少有一个定位成功时，构建裁剪区域（缺失的边界先用占位值，后续在裁剪时根据图像尺寸修正）
+                    # 临时占位：宽和高先用大值，裁剪时会根据图像大小截断
+                    tmp_crop_right = crop_right if crop_right is not None else 99999
+                    tmp_crop_bottom = crop_bottom if crop_bottom is not None else 99999
                     crop_region = (
                         crop_left - w_left,
                         0,  # 上边界从0开始（窗口顶部）
-                        crop_right - crop_left,
-                        crop_bottom - w_top,  # 下边界到工具栏最上坐标
+                        tmp_crop_right - crop_left,
+                        tmp_crop_bottom - w_top,
                     )
                     print(f"e行PC裁剪区域: {crop_region}")
                     textPad_insert(f"e行PC裁剪区域: {crop_region}")
                 else:
-                    print("e行PC定位图片未全部找到，使用全窗口检测")
-                    textPad_insert("e行PC定位图片未全部找到，使用全窗口检测")
+                    # 所有图片均未找到时，使用基于图像尺寸的估算裁剪区域
+                    # 此处image尚未获取，在OCR后根据实际图像尺寸计算
+                    print("e行PC定位图片均未找到，将在OCR后使用估算裁剪区域")
+                    crop_region = "estimated"
             except Exception as e:
                 print(f"e行PC区域定位失败: {e}，使用全窗口检测")
                 textPad_insert(f"e行PC区域定位失败: {e}，使用全窗口检测")
@@ -1082,8 +1098,24 @@ def check_screen():
             saveimg=False, printResult=False, conf_detail=ocr_detail, engine=ocr_method
         )
 
+        # e行PC模式：若定位图片未找到，使用图像实际尺寸估算裁剪区域
+        if conf_app_name == "e行PC" and crop_region == "estimated":
+            try:
+                img_h, img_w = image.shape[:2]
+                crop_region = (
+                    300,  # crop_x: 避开左侧边栏（约300px）
+                    0,    # crop_y: 从顶部开始
+                    img_w - 350,  # crop_w: 宽度减去左右边距
+                    img_h - 150,  # crop_h: 高度减去底部工具栏
+                )
+                print(f"e行PC使用估算裁剪区域(基于图像尺寸{img_w}x{img_h}): {crop_region}")
+                textPad_insert(f"e行PC使用估算裁剪区域: {crop_region}")
+            except Exception as e:
+                print(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
+                textPad_insert(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
+                crop_region = None
         # e行PC模式：若定位到裁剪区域，则裁剪图像并重新进行OCR
-        if conf_app_name == "e行PC" and crop_region is not None:
+        if conf_app_name == "e行PC" and crop_region is not None and crop_region != "estimated":
             try:
                 crop_x, crop_y, crop_w, crop_h = crop_region
                 # 限制裁剪高度不超出图像
@@ -1446,7 +1478,7 @@ def check_screen():
                             )
                             try:
                                 location_q = pyautogui.locateOnScreen(
-                                    quota_image, confidence=0.8
+                                    quota_image, confidence=0.7
                                 )
                             except pyautogui.ImageNotFoundException:
                                 location_q = None
@@ -1725,7 +1757,7 @@ def check_screen():
             try:
                 newmsg_loc = pyautogui.locateOnScreen(
                     get_resource_path_dpi("./resources/image/newmsg_hdex_pc.png"),
-                    confidence=0.8,
+                    confidence=0.7,
                 )
                 if newmsg_loc is not None:
                     print("e行PC新消息滚动按钮已定位，点击滚动到最新消息")
@@ -2854,14 +2886,23 @@ def get_resource_path_dpi(relative_path):
     basename = os.path.basename(base_path)
     name, ext = os.path.splitext(basename)
 
-    # 按与当前scale的差距排序
+    # 如果当前系统缩放接近1.0，直接使用基准图片，避免错用其他缩放版本
+    if abs(scale - 1.0) < 0.05:
+        return base_path
+
+    # 按与当前scale的差距排序（从小到大）
     sorted_candidates = sorted(scale_candidates, key=lambda s: abs(s - scale))
 
     for s in sorted_candidates:
         if s == 1.0:
             # 1.0x 就是基准图片本身，跳过不需查找
             continue
-        scaled_name = f"{name}@{s}x{ext}"
+        # 只使用与当前缩放比例接近（差距不超过25%）的缩放版本
+        if abs(s - scale) > 0.25:
+            continue
+        # 格式化缩放比例，如 1.25 -> "1.25x", 2.0 -> "2x"（去掉末尾的.0）
+        scale_str = f"{s:.2f}".rstrip("0").rstrip(".") + "x"
+        scaled_name = f"{name}@{scale_str}{ext}"
         scaled_path = os.path.join(dir_name, scaled_name)
         if os.path.exists(scaled_path):
             # 如果缩放比例与当前系统DPI完全匹配，直接使用
