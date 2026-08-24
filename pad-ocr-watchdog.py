@@ -533,13 +533,18 @@ def ocr_img_text(
     image = path
 
     # 图片路径为空就默认获取屏幕截图
-    if image == "":
+    if isinstance(image, str) and image == "":
         image, fullscreen = screenshot(w_title=window_title)
 
-    else:
+    elif isinstance(image, str):
         # 不为空就打开
         image = Image.open(image).convert("RGB")
-    image = numpy.array(image)
+        image = numpy.array(image)
+    elif isinstance(image, numpy.ndarray):
+        # 已经是numpy数组，直接使用
+        pass
+    else:
+        image = numpy.array(image)
     if engine == "paddle":
         global _paddle_ocr_instance
         if '_paddle_ocr_instance' not in globals() or _paddle_ocr_instance is None:
@@ -926,9 +931,75 @@ def check_screen():
         alert_found = False
         print("WatchDog Checking At ", get_curtime())
         textPad_insert("WatchDog Checking At "+get_curtime())
+
+        # e行PC模式下，使用三张定位图片裁剪有效检测区域（排除标题栏、侧边栏和工具栏）
+        crop_region = None
+        if conf_app_name == "e行PC":
+            try:
+                # 定位左侧边缘图：取其最右下坐标作为裁剪左边界
+                left_loc = pyautogui.locateOnScreen(
+                    get_resource_path("./resources/image/left_edge_hdex_pc.png"),
+                    confidence=0.8,
+                    region=(w_left, w_top, 200, 800)  # 仅在窗口左侧区域搜索
+                )
+                # 定位右上边缘图：取其最左下坐标作为裁剪右边界
+                right_loc = pyautogui.locateOnScreen(
+                    get_resource_path("./resources/image/rightup_edge_hdex_pc.png"),
+                    confidence=0.8,
+                    region=(w_left + 500, w_top, 400, 600)  # 仅在窗口右侧区域搜索
+                )
+                # 定位工具栏图（在聊天下方）：取其最上坐标作为裁剪下边界
+                toolbar_loc = pyautogui.locateOnScreen(
+                    get_resource_path("./resources/image/toolbar_hdex_pc.png"),
+                    confidence=0.8,
+                    region=(w_left, w_top, 800, 200)  # 仅在窗口顶部区域搜索
+                )
+                if left_loc and right_loc and toolbar_loc:
+                    crop_left = left_loc.left + left_loc.width  # 左图最右下x
+                    crop_right = right_loc.left  # 右上图最左下x
+                    crop_bottom = toolbar_loc.top  # 工具栏最上坐标作为裁剪下边界（保留其上方的聊天内容）
+                    # 裁剪区域相对于窗口（screenshot区域）的坐标
+                    crop_region = (
+                        crop_left - w_left,
+                        0,  # 上边界从0开始（窗口顶部）
+                        crop_right - crop_left,
+                        crop_bottom - w_top  # 下边界到工具栏最上坐标
+                    )
+                    print(f"e行PC裁剪区域: {crop_region}")
+                    textPad_insert(f"e行PC裁剪区域: {crop_region}")
+                else:
+                    print("e行PC定位图片未全部找到，使用全窗口检测")
+                    textPad_insert("e行PC定位图片未全部找到，使用全窗口检测")
+            except Exception as e:
+                print(f"e行PC区域定位失败: {e}，使用全窗口检测")
+                textPad_insert(f"e行PC区域定位失败: {e}，使用全窗口检测")
+                crop_region = None
+
         ocr_resp, img_filename, image, fullscreen = ocr_img_text(
             saveimg=False, printResult=False, conf_detail=ocr_detail, engine=ocr_method
         )
+
+        # e行PC模式：若定位到裁剪区域，则裁剪图像并重新进行OCR
+        if conf_app_name == "e行PC" and crop_region is not None:
+            try:
+                crop_x, crop_y, crop_w, crop_h = crop_region
+                # 限制裁剪高度不超出图像
+                if crop_y + crop_h > image.shape[0]:
+                    crop_h = image.shape[0] - crop_y
+                if crop_x + crop_w > image.shape[1]:
+                    crop_w = image.shape[1] - crop_x
+                if crop_w > 0 and crop_h > 0:
+                    cropped_image = image[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
+                    # 对裁剪后的图像重新做OCR
+                    ocr_resp, img_filename, image, fullscreen = ocr_img_text(
+                        path=cropped_image, saveimg=False, printResult=False,
+                        conf_detail=ocr_detail, engine=ocr_method
+                    )
+                    print(f"裁剪后OCR完成，裁剪区域: {crop_region}")
+                    textPad_insert(f"裁剪后OCR完成，裁剪区域: {crop_region}")
+            except Exception as e:
+                print(f"裁剪后OCR失败: {e}")
+                textPad_insert(f"裁剪后OCR失败: {e}")
         if ocr_method == "tesseract":
             if ocr_detail == 1:
                 ocr_temp = ''
@@ -994,9 +1065,9 @@ def check_screen():
                                 if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
                                     char_pixels = (roi <= 80).all(axis=2)
                                     char_num = 20
-                                elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
+                                elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色 (#E4E4E5)，判断灰白像素数量
                                     char_pixels = (
-                                        roi == 232).all(axis=2)
+                                        roi >= 228).all(axis=2)
                                     char_num = 60
                                 else:  # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
                                     char_pixels = (roi >= 250).all(axis=2)
@@ -1085,9 +1156,9 @@ def check_screen():
                                 if conf_app_name == "蓝信":  # 蓝信接收到的文字为黑色，判断黑色像素数量
                                     char_pixels = (roi <= 80).all(axis=2)
                                     char_num = 20
-                                elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色，判断灰白像素数量
+                                elif conf_app_name == "e行PC":  # HDe行接收到的文字为背景为灰白色 (#E4E4E5)，判断灰白像素数量
 
-                                    char_pixels = (roi >= 232).all(axis=2)
+                                    char_pixels = (roi >= 228).all(axis=2)
                                     char_num = 60
                                 else:  # 其他应用(e行安卓)接收到的文字为背景为白色，判断白像素数量
                                     char_pixels = (roi >= 250).all(axis=2)
