@@ -1,5 +1,4 @@
 from Crypto.Cipher import AES
-from pyautogui import *
 import keyboard
 from PIL import Image
 from PIL import ImageGrab
@@ -191,7 +190,7 @@ def textPad_save():
         print("TextPad is None, Cannot Save")
         return "TextPad is None, Cannot Save"
     try:
-        filename= f"logs/textPad_content{get_curtime('%Y%m%d%')}.txt"
+        filename= f"logs/textPad_content{get_curtime('%Y%m%d%H%M%S')}.txt"
         with open(filename, "w", encoding="utf-8") as f:
             content = textPad.get("1.0", "end")
             f.write(content)
@@ -314,7 +313,7 @@ def put_email_queue(message,  smtp_host, smtp_port,  mail_user, mail_pass, smtpt
 @new_thread
 def process_email_queue(email_queue):
     loguru.logger.info("邮件队列处理线程已启动")
-    while 1 == 1:
+    while True:
         if email_queue.empty():
             # loguru.logger.info("邮件队列为空，等待新任务")
             time.sleep(1)
@@ -383,7 +382,6 @@ def send_email(
 
         # message.attach(picture)
         return put_email_queue(message,  smtp_host, smtp_port,  mail_user, mail_pass, smtptype)
-        return send_mail(message, smtp_host, smtp_port, mail_user, mail_pass, smtptype)
 
     else:
         return send_mail_http(Subject, content, tomail)
@@ -542,12 +540,13 @@ def ocr_img_text(
         # 不为空就打开
         image = Image.open(image).convert("RGB")
     image = numpy.array(image)
-    # need to run only once to download and load model into memory
     if engine == "paddle":
-        ocr = paddleocr.PaddleOCR(
-            use_angle_cls=True, lang="ch", show_log=False)
+        global _paddle_ocr_instance
+        if '_paddle_ocr_instance' not in globals() or _paddle_ocr_instance is None:
+            _paddle_ocr_instance = paddleocr.PaddleOCR(
+                use_angle_cls=True, lang="ch", show_log=False)
 
-        result = ocr.ocr(image, cls=True)
+        result = _paddle_ocr_instance.ocr(image, cls=True)
         if printResult is True:
             for line in result:
                 for word in line:
@@ -1520,15 +1519,15 @@ def send_sep(ocr, data, contents="", send_to_default=True):  # 根据联系人�
     if conf_wxmsg:
 
         if to_wx != "":
-            if micromsg_method == "local":
-                message = {
-                    "content": contents,
-                    "touser": wxmsg_touser
-                }
+                if micromsg_method == "local":
+                    message = {
+                        "content": contents,
+                        "touser": to_wx
+                    }
 
-                message_queue.put(message)
-            elif micromsg_method == "server":
-                wxmsg(to_wx, contents)
+                    message_queue.put(message)
+                elif micromsg_method == "server":
+                    wxmsg(to_wx, contents)
         else:
             print("No Wxmsg Address")
     if conf_serial:
@@ -1896,15 +1895,12 @@ def serial_send(type, temp_data):
 
 @new_thread
 def serial_daemon():
-
-    from queue import Queue
     global serial_queue
-    serial_queue = Queue()
+    serial_queue = queue.Queue()
     while True:
-        if serial_queue.empty() == False:
-            serial_data = serial_queue.get()
-            serial_send_device(serial_data[0], serial_data[1])
-        time.sleep(0.1)
+        # 使用阻塞获取替代轮询，减少CPU占用
+        serial_data = serial_queue.get()
+        serial_send_device(serial_data[0], serial_data[1])
 
 # 串口发送数据
 
@@ -1925,6 +1921,8 @@ def serial_send_device(type, temp_data):
     while serial_opened == False:
         try:
             uart1 = open_uart(port, bps, timeout)
+            if uart1 is False:
+                raise Exception("open_uart returned False")
             serial_opened = True
         except Exception as e:
             loguru.logger.error("Serial Open Error."+str(e))
@@ -2163,7 +2161,7 @@ def daemon_worker():
     global app_run, daemon_interval, exit_flag
 
     running_interval = 0
-    while 1 == 1:
+    while True:
         if exit_flag.is_set() == True:
             break
 
@@ -2594,6 +2592,8 @@ if __name__ == "__main__":
             ],
         )
     )
+    if conf_app_name == "e行pc":
+        window_title="华电e行"
     daemon_interval = int(daemon_interval)
     print("daemon_interval:", daemon_interval)
     alert_mp3_file = alert_mp3_file.strip()
@@ -2618,11 +2618,11 @@ if __name__ == "__main__":
     if conf_serial == "1":  # 是否启用串口发送功能
         conf_serial = True
     else:
-        conf_serial = False
-        if args.UseSerial == "no":  # 是否启用串口发送功能
-            conf_serial = False
-        else:
+        # 如果配置为0，检查命令行参数是否覆盖
+        if args.UseSerial == "yes":
             conf_serial = True
+        else:
+            conf_serial = False
     if send_snapshot == "1":  # 是否发送截图
         send_snapshot = True
     else:
@@ -2750,9 +2750,8 @@ if __name__ == "__main__":
     # 修改1: 定义全局状态变量
     settings_window = None  # 确保settings_window是全局变量
     sw_show = False  # False表示隐藏，True表示显示
-    # 只调用一次 sw_console()
-    root.after(100, sw_console)  # 延迟100ms后调用，确保主循环已启动
-    root.after(0, sw_console)  # 延迟100ms后调用，确保主循环已启动
+    # 延迟启动设置窗口，确保主循环已启动
+    root.after(100, sw_console)
     root.protocol("WM_DELETE_WINDOW", sw_console)  # 确保关闭窗口时调用sw_console
 
     # 启动队列处理
