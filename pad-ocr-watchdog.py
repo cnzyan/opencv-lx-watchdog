@@ -32,7 +32,7 @@ import threading
 from functools import wraps
 import queue
 # to fix OSError: [WinError 127] 找不到指定的程序。 Error loading "C:\Users\cnzya\AppData\Roaming\Python\Python313\site-packages\torch\lib\shm.dll" or one of its dependencies.
-# import torch
+import torch
 # fix end
 requests.packages.urllib3.disable_warnings()
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 允许 Intel AI OpenMP 库的重复加载
@@ -189,11 +189,11 @@ def textPad_save():
     global textPad
     if textPad == None:
         print("TextPad is None, Cannot Save")
-        return
+        return "TextPad is None, Cannot Save"
     try:
         filename= f"logs/textPad_content{get_curtime('%Y%m%d%')}.txt"
         with open(filename, "w", encoding="utf-8") as f:
-            content = textPad.get("1.0", "end-1c")
+            content = textPad.get("1.0", "end")
             f.write(content)
         print("TextPad Content Saved")
         textPad_insert("TextPad Content Saved")
@@ -201,13 +201,14 @@ def textPad_save():
     except Exception as e:
         print("Error Saving TextPad Content: ", str(e))
         textPad_insert("Error Saving TextPad Content: "+str(e))
+        return "Error Saving TextPad Content: "+str(e)
 def textPad_save_and_clear():
     # 保存文本框内容到文件并清空文本框
     global textPad
     if textPad == None:
         print("TextPad is None, Cannot Save and Clear")
         return
-    line_count = int(textPad.index("end-1c").split('.')[0])
+    line_count = int(len(textPad.get("1.0","end").splitlines()))
     print("TextPad Line Count: ", line_count)
     if line_count < 1000:
         # print("TextPad is Empty, No Need to Save")
@@ -215,6 +216,9 @@ def textPad_save_and_clear():
         return
     try:
         filename=textPad_save()
+        for i in range(0, 3):
+            time.sleep(0.5)
+            textPad_insert(".")
         textPad_clear()
         textPad_insert("TextPad Content Saved to "+filename)
     except Exception as e:
@@ -273,11 +277,8 @@ def set_daemon_permit(tag="none"):
             daemon_permit = True
     if daemon_permit == True:
         # 每次启动都清空文本框
-        textPad_save()
-        for i in range(0, 3):
-            time.sleep(0.5)
-            textPad_insert(".")
-        textPad_clear()
+        textPad_save_and_clear()
+
         print("WatchDog Started At ", get_curtime())
         textPad_insert("WatchDog Started At "+get_curtime())
     else:
