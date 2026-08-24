@@ -33,12 +33,22 @@ import queue
 # to fix OSError: [WinError 127] 找不到指定的程序。 Error loading "C:\Users\cnzya\AppData\Roaming\Python\Python313\site-packages\torch\lib\shm.dll" or one of its dependencies.
 import torch
 # fix end
+import ctypes
+
+# 设置DPI感知，确保窗口坐标和屏幕坐标使用一致的物理像素
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # Windows 8.1+
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()  # Windows 7/8
+    except Exception:
+        pass
 requests.packages.urllib3.disable_warnings()
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 允许 Intel AI OpenMP 库的重复加载
 # .venv\Scripts\Activate.ps1
 # pip install -r requirements.txt
 # pyinstaller -F pad-ocr-watchdog.py
-VERSION_TEXT = "ProG By CrazYan 202408/upd202506"
+VERSION_TEXT = "ProG By CrazYan 202408/upd202608"
 CONTACT_FILE = "conf_contacts.txt"
 ALERT_WORDS_FILE = "conf_alert_words.txt"
 MSG_GROUP_FILE = "conf_msg_groups.txt"
@@ -535,6 +545,7 @@ def ocr_img_text(
     # 图片路径为空就默认获取屏幕截图
     if isinstance(image, str) and image == "":
         image, fullscreen = screenshot(w_title=window_title)
+        image = numpy.array(image)
 
     elif isinstance(image, str):
         # 不为空就打开
@@ -641,10 +652,11 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
             window = pygetwindow.getWindowsWithTitle(w_title)[0]
             if window.isActive == False:
                 try:
-                    window.restore()  # 恢复窗口,如果窗口处于最小化状态，无法截图
+                    if window.isMaximized == False:
+                        window.restore()  # 非最大化时才恢复窗口（避免全屏变窗口化）
                     window.activate()  # 激活窗口
                     return True
-                except:
+                except Exception:
                     print("Window Active Failed, try again.")
                     return False
             else:
@@ -938,19 +950,19 @@ def check_screen():
             try:
                 # 定位左侧边缘图：取其最右下坐标作为裁剪左边界
                 left_loc = pyautogui.locateOnScreen(
-                    get_resource_path("./resources/image/left_edge_hdex_pc.png"),
+                    get_resource_path_dpi("./resources/image/left_edge_hdex_pc.png"),
                     confidence=0.8,
                     region=(w_left, w_top, 200, 800)  # 仅在窗口左侧区域搜索
                 )
                 # 定位右上边缘图：取其最左下坐标作为裁剪右边界
                 right_loc = pyautogui.locateOnScreen(
-                    get_resource_path("./resources/image/rightup_edge_hdex_pc.png"),
+                    get_resource_path_dpi("./resources/image/rightup_edge_hdex_pc.png"),
                     confidence=0.8,
                     region=(w_left + 500, w_top, 400, 600)  # 仅在窗口右侧区域搜索
                 )
                 # 定位工具栏图（在聊天下方）：取其最上坐标作为裁剪下边界
                 toolbar_loc = pyautogui.locateOnScreen(
-                    get_resource_path("./resources/image/toolbar_hdex_pc.png"),
+                    get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png"),
                     confidence=0.8,
                     region=(w_left, w_top, 800, 200)  # 仅在窗口顶部区域搜索
                 )
@@ -1203,7 +1215,7 @@ def check_screen():
         if ocr_detail == 1 or ocr_method == "paddle":
             # 检查未读消息
             pos = None
-            if conf_app_name == "蓝信":  # 蓝信/e行PC
+            if conf_app_name == "蓝信":  # 蓝信
                 pos = check_unread_msg(image, ocr_resp)
                 if pos != False and pos != None:
                     try:
@@ -1233,16 +1245,31 @@ def check_screen():
                         y_offset = 120
 
                     if fullscreen == "yes":
-                        if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
+                        if conf_app_name == "蓝信":
                             pyautogui.click(
                                 # 右键点击关键字文本
                                 pos_to_mid[0], pos_to_mid[1], button="right")
-
                             time.sleep(1)
-
                             pyautogui.click(
                                 # 左键点击菜单项
                                 pos_to_mid[0]+50, pos_to_mid[1]+y_offset, button="left")
+                        elif conf_app_name == "e行PC":  # e行PC，类似e行安卓，长按弹出菜单
+                            pyautogui.click(
+                                pos_to_mid[0], pos_to_mid[1], button="right")
+                            time.sleep(1)
+                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_pc.png")
+                            try:
+                                location_q = pyautogui.locateOnScreen(
+                                    quota_image, confidence=0.8)
+                            except pyautogui.ImageNotFoundException:
+                                location_q = None
+                            if location_q:
+                                print('图片位置:', location_q)
+                                pyautogui.click(
+                                    location_q[0]+20, location_q[1]+25, button="left")
+                            else:
+                                print('未找到quota_hdex_pc.png')
+                                textPad_insert('未找到quota_hdex_pc.png')
                         else:  # e行安卓，长按弹出菜单
                             # 移动鼠标到指定位置
                             pyautogui.moveTo(pos_to_mid[0], pos_to_mid[1]+30)
@@ -1258,9 +1285,12 @@ def check_screen():
                             pyautogui.mouseUp(button='left')
 
                             time.sleep(1)
-                            quota_image = './resources/image/quota_hdex_android.png'
-                            location_q = pyautogui.locateOnScreen(
-                                quota_image, confidence=0.8)  # 查找按钮图标
+                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_android.png")
+                            try:
+                                location_q = pyautogui.locateOnScreen(
+                                    quota_image, confidence=0.8)  # 查找按钮图标
+                            except pyautogui.ImageNotFoundException:
+                                location_q = None
                             if location_q:
                                 print('图片位置:', location_q)
                                 pyautogui.click(
@@ -1268,14 +1298,30 @@ def check_screen():
                                     location_q[0]+20, location_q[1]+25, button="left")
                     else:  # fullscreen == "no" 只对蓝信/e行PC有效
                         # 在当前活动窗口内点击
-                        # 点击当前活动窗口内的相对坐标位置
-                        if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC,右键点击关键字文本弹出菜单，点击菜单
+                        if conf_app_name == "蓝信":
                             click_in_window(
                                 pos_to_mid[0], pos_to_mid[1], "right")
                             time.sleep(1)
                             # 点击当前活动窗口内的相对坐标位置
                             click_in_window(
                                 pos_to_mid[0]+50, pos_to_mid[1]+y_offset, "left")
+                        elif conf_app_name == "e行PC":  # e行PC，右键弹出菜单后通过图片定位点击输入框
+                            click_in_window(
+                                pos_to_mid[0], pos_to_mid[1], "right")
+                            time.sleep(1)
+                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_pc.png")
+                            try:
+                                location_q = pyautogui.locateOnScreen(
+                                    quota_image, confidence=0.8)
+                            except pyautogui.ImageNotFoundException:
+                                location_q = None
+                            if location_q:
+                                print('图片位置:', location_q)
+                                pyautogui.click(
+                                    location_q[0]+20, location_q[1]+25, button="left")
+                            else:
+                                print('未找到quota_hdex_pc.png')
+                                textPad_insert('未找到quota_hdex_pc.png')
                         else:  # e行安卓
                             active_win = pyautogui.getActiveWindow()
 
@@ -1303,9 +1349,12 @@ def check_screen():
                             pyautogui.mouseUp(button='left')
 
                             time.sleep(1)
-                            quota_image = './resources/image/quota_hdex_android.png'
-                            location_q = pyautogui.locateOnScreen(
-                                quota_image, confidence=0.8)  # 查找按钮图标
+                            quota_image = get_resource_path_dpi("./resources/image/quota_hdex_android.png")
+                            try:
+                                location_q = pyautogui.locateOnScreen(
+                                    quota_image, confidence=0.8)  # 查找按钮图标
+                            except pyautogui.ImageNotFoundException:
+                                location_q = None
                             if location_q:
                                 print('图片位置:', location_q)
                                 pyautogui.click(
@@ -1318,15 +1367,15 @@ def check_screen():
                     try:
                         # 查找图片位置
                         if conf_app_name == "蓝信":  # 蓝信
-                            toolbar_image = './resources/image/toolbar_lx.png'
+                            toolbar_image = get_resource_path_dpi("./resources/image/toolbar_lx.png")
                             x_offset = 0
                             y_offset = 80
                         elif conf_app_name == "e行PC":  # HDe行
-                            toolbar_image = './resources/image/toolbar_hdex_pc.png'
+                            toolbar_image = get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png")
                             x_offset = 0
                             y_offset = 80
                         else:  # e行安卓
-                            toolbar_image = './resources/image/toolbar_hdex_android.png'
+                            toolbar_image = get_resource_path_dpi("./resources/image/toolbar_hdex_android.png")
                             x_offset = 100
                             y_offset = 20
                         location = pyautogui.locateOnScreen(
@@ -1361,7 +1410,7 @@ def check_screen():
                     if conf_app_name == "蓝信" or conf_app_name == "e行PC":  # 蓝信/e行PC
                         pyautogui.press('enter')
                     else:  # e行安卓
-                        send_button_image = './resources/image/send_button_hdex_android.png'
+                        send_button_image = get_resource_path_dpi("./resources/image/send_button_hdex_android.png")
                         try:
                             location = pyautogui.locateOnScreen(
                                 send_button_image, confidence=0.7)  # 查找按钮图标
@@ -1434,6 +1483,24 @@ def check_screen():
                         )
                     if conf_serial:
                         serial_send("email", contents)
+        # e行PC模式：自动回复和消息发送完成后，再检查新消息滚动按钮并点击滚动到最新消息
+        if conf_app_name == "e行PC":
+            try:
+                newmsg_loc = pyautogui.locateOnScreen(
+                    get_resource_path_dpi("./resources/image/newmsg_hdex_pc.png"),
+                    confidence=0.8
+                )
+                if newmsg_loc is not None:
+                    print("e行PC新消息滚动按钮已定位，点击滚动到最新消息")
+                    textPad_insert("e行PC新消息滚动按钮已定位，点击滚动")
+                    pyautogui.click(
+                        newmsg_loc.left + newmsg_loc.width // 2,
+                        newmsg_loc.top + newmsg_loc.height // 2,
+                        button='left'
+                    )
+            except Exception as e:
+                print(f"e行PC新消息滚动按钮检测失败: {e}")
+                textPad_insert(f"e行PC新消息滚动按钮检测失败: {e}")
     except Exception as e:
         print("Error in WatchDog: "+str(e))
         textPad_insert("Error in WatchDog: "+str(e))
@@ -1989,6 +2056,8 @@ def serial_send_device(type, temp_data):
     bps = int(serialdev.split(',')[1])
     timeout = int(serialdev.split(',')[2])
 
+    max_retries = 3
+    retry_count = 0
     while serial_opened == False:
         try:
             uart1 = open_uart(port, bps, timeout)
@@ -1996,7 +2065,13 @@ def serial_send_device(type, temp_data):
                 raise Exception("open_uart returned False")
             serial_opened = True
         except Exception as e:
-            loguru.logger.error("Serial Open Error."+str(e))
+            retry_count += 1
+            loguru.logger.error(f"Serial Open Error (尝试 {retry_count}/{max_retries}): {e}")
+            if retry_count >= max_retries:
+                loguru.logger.error(f"串口 {port} 打开失败已达最大重试次数，放弃本次发送")
+                print(f"串口 {port} 打开失败，已放弃发送")
+                textPad_insert(f"串口 {port} 打开失败，已放弃发送")
+                return
             time.sleep(1)
 
         # 定义YMODEM发送函数
@@ -2376,7 +2451,7 @@ def splash_play():
                 # 加载失败时使用单帧图像
                 print(f"GIF加载出错: {e}")
                 img = ImageTk.PhotoImage(Image.open(
-                    "./resources/image/reload.gif").resize((80, 80), Image.LANCZOS))
+                    get_resource_path("./resources/image/reload.gif")).resize((80, 80), Image.LANCZOS))
                 self.frames = [img]
 
         def play(self):
@@ -2421,10 +2496,69 @@ def get_resource_path(relative_path):
     if relative_path.startswith("./"):
         relative_path = relative_path[2:]
     relative_path = relative_path.replace("/", "\\")
+    base_dir = ""
     if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
+        base_dir = sys._MEIPASS
+    else:
+        base_dir = os.path.abspath(".")
+    return os.path.join(base_dir, relative_path)
 
-    return os.path.join(os.path.abspath("."), relative_path)
+
+# 获取当前系统DPI缩放比例
+def get_dpi_scale():
+    """获取当前系统DPI缩放比例，如1.0、1.25、1.5、2.0等"""
+    try:
+        windll = ctypes.windll
+        user32 = windll.user32
+        hdc = user32.GetDC(0)
+        dpi = windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
+        user32.ReleaseDC(0, hdc)
+        return dpi / 96.0
+    except Exception:
+        return 1.0
+
+
+# 获取与当前DPI匹配的资源图片路径
+def get_resource_path_dpi(relative_path):
+    """
+    根据当前DPI缩放比例自动选择最匹配的资源图片。
+    图片命名规则: {basename}@{scale}x.{ext}，如 toolbar_hdex_pc@1.5x.png
+    找不到匹配的缩放版本时回退到基准图片（get_resource_path的结果）。
+    """
+    base_path = get_resource_path(relative_path)
+
+    # 只对 resources/image 下的图片进行DPI适配
+    if 'resources\\image' not in base_path and 'resources/image' not in relative_path:
+        return base_path
+
+    scale = get_dpi_scale()
+
+    # 定义需要尝试的缩放比例（从最接近到最远）
+    scale_candidates = [1.0, 1.25, 1.5, 2.0, 1.75, 3.0, 2.5, 1.33]
+
+    # 找到最接近当前缩放的可用图片
+    dir_name = os.path.dirname(base_path)
+    basename = os.path.basename(base_path)
+    name, ext = os.path.splitext(basename)
+
+    # 按与当前scale的差距排序
+    sorted_candidates = sorted(scale_candidates, key=lambda s: abs(s - scale))
+
+    for s in sorted_candidates:
+        if s == 1.0:
+            # 1.0x 就是基准图片本身，跳过不需查找
+            continue
+        scaled_name = f"{name}@{s}x{ext}"
+        scaled_path = os.path.join(dir_name, scaled_name)
+        if os.path.exists(scaled_path):
+            # 如果缩放比例与当前系统DPI完全匹配，直接使用
+            if abs(s - scale) < 0.01:
+                return scaled_path
+            # 否则继续找更接近的
+            return scaled_path
+
+    # 没有找到任何缩放版本的图片，回退到基准图片
+    return base_path
 
 
 @new_thread
@@ -2663,8 +2797,9 @@ if __name__ == "__main__":
             ],
         )
     )
-    if conf_app_name == "e行pc":
-        window_title="华电e行"
+    if conf_app_name == "e行pc" or conf_app_name == "e行PC":
+        window_title = "华电e行"
+        conf_app_name = "e行PC"  # 统一为标准格式
     daemon_interval = int(daemon_interval)
     print("daemon_interval:", daemon_interval)
     alert_mp3_file = alert_mp3_file.strip()
