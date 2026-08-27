@@ -577,10 +577,18 @@ def ocr_img_text(
     else:
         image = numpy.array(image)
     if engine == "paddle":
-        # 每次OCR调用创建新实例，避免oneDNN fused_conv2d错误
-        _paddle_ocr_instance = paddleocr.PaddleOCR(
-            use_angle_cls=True, lang="ch", show_log=False
-        )
+        # 使用全局单例（2.6.2无oneDNN问题），避免每次重新加载模型
+        global _paddle_ocr_instance
+        if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
+            _paddle_ocr_instance = paddleocr.PaddleOCR(
+                use_angle_cls=True, lang="ch", show_log=False
+            )
+        # 2.6.2上使用mkldnn加速CPU推理，对Haswell兼容性好
+        import paddle as _pad
+        try:
+            _pad.set_flags({"FLAGS_use_mkldnn": True})
+        except Exception:
+            pass
         result = _paddle_ocr_instance.ocr(image, cls=True)
         if printResult is True:
             for line in result:
