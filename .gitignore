@@ -38,6 +38,7 @@ __pycache__/
 history_ip.log
 # C extensions
 *.so
+* - 副本.*
 *.spec
 # Distribution / packaging
 .Python

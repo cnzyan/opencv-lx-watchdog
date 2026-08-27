@@ -1,7 +1,8 @@
 pyautogui
 common
-paddlepaddle
 paddleocr==2.10.0
+# paddlepaddle会被paddleocr自动安装，不要单独指定版本
+# 注意：不要安装paddlepaddle-gpu，会产生冲突
 requests
 numpy
 pillow

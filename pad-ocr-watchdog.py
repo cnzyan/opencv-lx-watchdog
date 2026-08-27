@@ -577,12 +577,10 @@ def ocr_img_text(
     else:
         image = numpy.array(image)
     if engine == "paddle":
-        global _paddle_ocr_instance
-        if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
-            _paddle_ocr_instance = paddleocr.PaddleOCR(
-                use_angle_cls=True, lang="ch", show_log=False
-            )
-
+        # 每次OCR调用创建新实例，避免oneDNN fused_conv2d错误
+        _paddle_ocr_instance = paddleocr.PaddleOCR(
+            use_angle_cls=True, lang="ch", show_log=False
+        )
         result = _paddle_ocr_instance.ocr(image, cls=True)
         if printResult is True:
             for line in result:
@@ -622,16 +620,22 @@ def ocr_img_text(
     img_name = "ImgTextOCR-img-" + get_curtime("%Y%m%d%H%M%S") + ".jpg"
     if saveimg is True:
         if engine == "paddle":
-            boxes = [
-                detection[0] for line in result for detection in line
-            ]  # Nested loop added
-            txts = [
-                detection[1][0] for line in result for detection in line
-            ]  # Nested loop added
-            scores = [
-                detection[1][1] for line in result for detection in line
-            ]  # Nested loop added
-            im_show = paddleocr.draw_ocr(image, boxes, txts, scores)
+            # paddleocr 3.x移除了draw_ocr，改为手动绘制
+            im_show = image.copy()
+            for line in result:
+                for detection in line:
+                    # detection: [box_points, (text, score)]
+                    box = detection[0]  # [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+                    text = detection[1][0]
+                    # 绘制矩形框
+                    pts = numpy.array(box, dtype=numpy.int32).reshape((-1, 1, 2))
+                    im_show = cv2.polylines(im_show, [pts], True, (0, 255, 0), 2)
+                    # 绘制文字
+                    top_left = (int(box[0][0]), int(box[0][1]) - 10)
+                    im_show = cv2.putText(
+                        im_show, text, top_left,
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2,
+                    )
         elif engine == "easyocr":
             im_show = image
             for detection in result:
