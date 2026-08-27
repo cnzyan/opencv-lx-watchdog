@@ -1,9 +1,7 @@
 from Crypto.Cipher import AES
 import gc
 import keyboard
-from PIL import Image
-from PIL import ImageGrab
-from PIL import ImageTk, ImageSequence
+from PIL import Image,ImageGrab,ImageTk, ImageSequence
 import numpy
 import time
 import requests
@@ -24,17 +22,13 @@ import pygetwindow
 import pyautogui
 import pystray
 import random
-from email import encoders
-from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import threading
 from functools import wraps
 import queue
+from collections import deque
 
-# to fix OSError: [WinError 127] 找不到指定的程序。 Error loading "C:\Users\cnzya\AppData\Roaming\Python\Python313\site-packages\torch\lib\shm.dll" or one of its dependencies.
-import torch
-# fix end
 # DPI感知由pyscreeze内部自动处理，不需要手动设置
 requests.packages.urllib3.disable_warnings()
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # 允许 Intel AI OpenMP 库的重复加载
@@ -161,7 +155,7 @@ def play_music(file_path):
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
-            continue
+            time.sleep(0.1)
         pygame.mixer.music.unload()
     elif play_method == "winsound":
         import winsound
@@ -176,11 +170,18 @@ def play_music(file_path):
 
 
 def textPad_insert(text):
-    # 在文本框中插入文本
-    global textPad
+    global textPad, root
     if textPad == None:
         print("TextPad is None, Cannot Insert Text")
         return
+    if threading.current_thread() is not threading.main_thread():
+        root.after(0, lambda t=text: _do_textPad_insert(t))
+    else:
+        _do_textPad_insert(text)
+
+
+def _do_textPad_insert(text):
+    global textPad
     textPad.insert("end", text + "\n")
     textPad.see("end")
 
@@ -240,17 +241,20 @@ def textPad_save_and_clear():
         textPad_insert("Error Saving TextPad Content: " + str(e))
 
 
+_valid_audio_file = None
+
+
 def run_play_music():
     # 播放音频报警
-    global alert_mp3_file, alert_permit, daemon_permit
-    if "resources/audio" not in alert_mp3_file:
-        # 如果路径中不包含'resources/audio'，需要添加前缀
-        alert_mp3_file = "./resources/audio/" + alert_mp3_file
-    # print("Alert MP3 File: ", alert_mp3_file)
-    if os.path.exists(alert_mp3_file) == False:
-        alert_mp3_file = "./resources/audio/alert.mp3"
+    global alert_mp3_file, alert_permit, daemon_permit, _valid_audio_file
+    if _valid_audio_file is None:
+        if "resources/audio" not in alert_mp3_file:
+            alert_mp3_file = "./resources/audio/" + alert_mp3_file
+        if os.path.exists(alert_mp3_file) == False:
+            alert_mp3_file = "./resources/audio/alert.mp3"
+        _valid_audio_file = alert_mp3_file
     if alert_permit == True:
-        play_music(alert_mp3_file)
+        play_music(_valid_audio_file)
     else:
         if daemon_permit == True:
             print(".", end="")
@@ -343,17 +347,16 @@ def put_email_queue(message, smtp_host, smtp_port, mail_user, mail_pass, smtptyp
 def process_email_queue(email_queue):
     loguru.logger.info("邮件队列处理线程已启动")
     while True:
-        if email_queue.empty():
-            # loguru.logger.info("邮件队列为空，等待新任务")
-            time.sleep(1)
+        try:
+            msg, host, port, user, passwd, security, delay = email_queue.get(timeout=1)
+        except queue.Empty:
             continue
-        msg, host, port, user, passwd, security, delay = email_queue.get()
         re_put = False
         if delay == 0:
             if send_mail(msg, host, port, user, passwd, security):
                 pass
             else:
-                delay = 60  # 如果发送失败，延迟60秒重试
+                delay = 60
                 loguru.logger.error("邮件发送失败，延迟60秒重试")
                 re_put = True
             time.sleep(0.1)
@@ -389,17 +392,12 @@ def send_email(
     if email_method == "smtp":
         message = MIMEMultipart()
         message["From"] = sender_email
-        maillist = ""
         temp = []
         if type(tomail) == str:
             temp.append(tomail)
         else:
             temp = tomail
-        for mail in temp:
-            if maillist == "":
-                maillist = maillist + mail
-            else:
-                maillist = maillist + "," + mail
+        maillist = ",".join(temp)
         # print(maillist)
         message["To"] = maillist
         message["Cc"] = ""
@@ -582,6 +580,10 @@ def ocr_img_text(
     if engine == "paddle":
         global _paddle_ocr_instance
         if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
+            try:
+                import torch
+            except Exception:
+                pass
             _paddle_ocr_instance = paddleocr.PaddleOCR(
                 use_angle_cls=True, lang="ch", show_log=False
             )
@@ -650,7 +652,7 @@ def ocr_img_text(
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2,
                     )
         elif engine == "easyocr":
-            im_show = image
+            im_show = image.copy()
             for detection in result:
                 # print(detection)
                 top_left = tuple([int(val) for val in detection[0][0]])
@@ -666,11 +668,8 @@ def ocr_img_text(
                     2,
                 )
         else:
-            im_show = image
+            im_show = image.copy()
         filepath = "screenshots"
-        if not os.path.isdir(filepath):
-            # 创建文件夹
-            os.mkdir(filepath)
         im_show = Image.fromarray(im_show)
         im_show.save(filepath + "\\" + img_name)
 
@@ -707,7 +706,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
             print("Window Not Found.")
             return False
         else:
-            window = pygetwindow.getWindowsWithTitle(w_title)[0]
+            window = windows[0]
             if window.isActive == False:
                 try:
                     if window.isMaximized == False:
@@ -721,9 +720,6 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                 return True
 
     filepath = "screenshots"
-    if not os.path.isdir(filepath):
-        # 创建文件夹
-        os.mkdir(filepath)
 
     if fullscreen == "no":
         # w_title="集团内部单位处置群"
@@ -735,7 +731,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
             fullscreen = "yes"
         else:
             try:
-                window = pygetwindow.getWindowsWithTitle(w_title)[0]
+                window = windows[0]
                 window_activate = True
                 if window.isActive == False:
                     window_activate = False
@@ -872,9 +868,7 @@ def check_unread_msg(image, ocr_resp):
     ]
     unread_detected = False
     if ocr_method == "tesseract":
-        all_text = ""
-        for word in ocr_resp["text"]:
-            all_text = all_text + word
+        all_text = "".join(ocr_resp["text"])
         if ocr_detail == 1:
 
             for chr in text_to_detect:
@@ -951,12 +945,11 @@ def click_unread_msg(pos):
     pass
 
 
+_SPLIT_PATTERN = re.compile(r"[a-zA-Z0-9_]+|\S")
+
+
 def split_string(s):
-    # 匹配连续的字母/数字/下划线 (词) 或单个非空白字符 (字)
-    # [a-zA-Z0-9_]+ : 连续英文字母、数字、下划线
-    # | : 或
-    # \S : 单个非空白字符 (包括中文、标点等)
-    return re.findall(r"[a-zA-Z0-9_]+|\S", s)
+    return _SPLIT_PATTERN.findall(s)
 
 
 # 检查屏幕内容
@@ -1040,7 +1033,8 @@ def check_screen():
         alert_found = False
         print("WatchDog Checking At ", get_curtime())
         textPad_insert("WatchDog Checking At " + get_curtime())
-        _log_memory("check_start")
+        if debug:
+            _log_memory("check_start")
 
         # e行PC模式下，使用三张定位图片裁剪有效检测区域（排除标题栏、侧边栏和工具栏）
         crop_region = None
@@ -1157,7 +1151,6 @@ def check_screen():
                         crop_y : crop_y + crop_h, crop_x : crop_x + crop_w
                     ].copy()
                     del image
-                    _gc_collect()
                     ocr_resp, img_filename, image, fullscreen = ocr_img_text(
                         path=cropped_image,
                         saveimg=False,
@@ -1166,7 +1159,6 @@ def check_screen():
                         engine=ocr_method,
                     )
                     del cropped_image
-                    _gc_collect()
                     print(f"裁剪后OCR完成，裁剪区域: {crop_region}")
                     textPad_insert(f"裁剪后OCR完成，裁剪区域: {crop_region}")
             except Exception as e:
@@ -1174,11 +1166,7 @@ def check_screen():
                 textPad_insert(f"裁剪后OCR失败: {e}")
         if ocr_method == "tesseract":
             if ocr_detail == 1:
-                ocr_temp = ""
-                for i in range(len(ocr_resp["text"])):
-                    if ocr_resp["text"][i] != "":  # 去除空行
-                        ocr_temp = ocr_temp + ocr_resp["text"][i]
-                ocr_resp_tes = ocr_temp
+                ocr_resp_tes = "".join(t for t in ocr_resp["text"] if t)
 
             else:
                 ocr_resp_tes = ocr_resp
@@ -1401,12 +1389,13 @@ def check_screen():
                                     char_pixels = (roi >= 250).all(axis=2)
                                     char_num = 60
                                 pixel_char_count = char_pixels.sum()
-                                textPad_insert(
-                                    "Conf App Name: "
-                                    + conf_app_name
-                                    + " , pixel_char_count:"
-                                    + str(pixel_char_count)
-                                )
+                                if debug:
+                                    textPad_insert(
+                                        "Conf App Name: "
+                                        + conf_app_name
+                                        + " , pixel_char_count:"
+                                        + str(pixel_char_count)
+                                    )
                                 if pixel_char_count > char_num:
                                     alert_found = True
                                     print(
@@ -1738,10 +1727,12 @@ def check_screen():
 
                     img_base64 = base64.b64encode(image_data).decode()
                     img_md5 = hashlib.md5(img_base64.encode("utf-8")).hexdigest()
-                    if img_md5 not in img_md5_list:
+                    if img_md5 not in img_md5_set:
+                        img_md5_set.add(img_md5)
                         img_md5_list.append(img_md5)
                         if len(img_md5_list) > 500:
-                            img_md5_list = img_md5_list[-200:]
+                            for _ in range(300):
+                                img_md5_set.discard(img_md5_list.popleft())
                     else:
                         print("Same Image Sent Already, Skip")
                         textPad_insert("Same Image Sent Already, Skip")
@@ -1832,7 +1823,8 @@ def check_screen():
         except Exception:
             pass
         _gc_collect()
-        _log_memory("check_end")
+        if debug:
+            _log_memory("check_end")
 
 
 @new_thread
@@ -2608,6 +2600,16 @@ def prepare_conf_file(configpath):  # 准备配置文件
 # 读取配置文件-配置项
 
 
+_encoding_cache = {}
+
+
+def get_file_encoding(filepath):
+    if filepath not in _encoding_cache:
+        with open(filepath, "rb") as f:
+            _encoding_cache[filepath] = chardet.detect(f.read())["encoding"]
+    return _encoding_cache[filepath]
+
+
 def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置文件
     conf_default = {
         "alert_mp3_file": "alert.mp3",
@@ -2646,9 +2648,7 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
         "email_receivers": "111@qq.com",
         "serialdev_in": "COM2,9600,1",
     }
-    with open(config_path, "rb") as f:
-        result = chardet.detect(f.read())
-        encoding = result["encoding"]
+    encoding = get_file_encoding(config_path)
     config.read(config_path, encoding=encoding)
     conf_item_settings = []
     for conf_item in conf_list:
@@ -2715,7 +2715,8 @@ def daemon_worker():
             # print("Daemon running...")
             # 执行定时任务
             schedule.run_pending()
-            time.sleep(1)
+            idle = schedule.idle_seconds()
+            time.sleep(max(1, idle) if idle is not None else 1)
 
 
 def quit_program():
@@ -2897,30 +2898,44 @@ def get_resource_path(relative_path):
 
 
 # 获取当前系统DPI缩放比例
+_cached_dpi_scale = None
+
+
 def get_dpi_scale():
     """获取当前系统DPI缩放比例，如1.0、1.25、1.5、2.0等"""
+    global _cached_dpi_scale
+    if _cached_dpi_scale is not None:
+        return _cached_dpi_scale
     try:
         windll = ctypes.windll
         user32 = windll.user32
         hdc = user32.GetDC(0)
         dpi = windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
         user32.ReleaseDC(0, hdc)
-        return dpi / 96.0
+        _cached_dpi_scale = dpi / 96.0
     except Exception:
-        return 1.0
+        _cached_dpi_scale = 1.0
+    return _cached_dpi_scale
 
 
 # 获取与当前DPI匹配的资源图片路径
+_dpi_path_cache = {}
+
+
 def get_resource_path_dpi(relative_path):
     """
     根据当前DPI缩放比例自动选择最匹配的资源图片。
     图片命名规则: {basename}@{scale}x.{ext}，如 toolbar_hdex_pc@1.5x.png
     找不到匹配的缩放版本时回退到基准图片（get_resource_path的结果）。
     """
+    if relative_path in _dpi_path_cache:
+        return _dpi_path_cache[relative_path]
+
     base_path = get_resource_path(relative_path)
 
     # 只对 resources/image 下的图片进行DPI适配
     if "resources\\image" not in base_path and "resources/image" not in relative_path:
+        _dpi_path_cache[relative_path] = base_path
         return base_path
 
     scale = get_dpi_scale()
@@ -2935,6 +2950,7 @@ def get_resource_path_dpi(relative_path):
 
     # 如果当前系统缩放接近1.0，直接使用基准图片，避免错用其他缩放版本
     if abs(scale - 1.0) < 0.05:
+        _dpi_path_cache[relative_path] = base_path
         return base_path
 
     # 按与当前scale的差距排序（从小到大）
@@ -2953,12 +2969,11 @@ def get_resource_path_dpi(relative_path):
         scaled_path = os.path.join(dir_name, scaled_name)
         if os.path.exists(scaled_path):
             # 如果缩放比例与当前系统DPI完全匹配，直接使用
-            if abs(s - scale) < 0.01:
-                return scaled_path
-            # 否则继续找更接近的
+            _dpi_path_cache[relative_path] = scaled_path
             return scaled_path
 
     # 没有找到任何缩放版本的图片，回退到基准图片
+    _dpi_path_cache[relative_path] = base_path
     return base_path
 
 
@@ -3173,17 +3188,20 @@ if __name__ == "__main__":
 
     last_sent_seprate = ""
     alert_msg = []
-    img_md5_list = []
+    img_md5_list = deque()
+    img_md5_set = set()
     if os.path.exists("img_md5_list.txt") == True:
         with open("img_md5_list.txt", "r", encoding="utf-8") as f:
             for line in f.readlines():
-                img_md5_list.append(line.strip())
+                md5 = line.strip()
+                if md5 and md5 not in img_md5_set:
+                    img_md5_set.add(md5)
+                    img_md5_list.append(md5)
     w_left, w_top = 0, 0
     debug = False
     log_path = "./logs"
-    if not os.path.isdir(log_path):
-        # 创建文件夹
-        os.mkdir(log_path)
+    os.makedirs(log_path, exist_ok=True)
+    os.makedirs("screenshots", exist_ok=True)
     sheduler = loguru.logger.add(
         log_path + "\\padocr-watchdog.log",
         rotation="1 day",
