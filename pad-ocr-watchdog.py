@@ -1,4 +1,5 @@
 from Crypto.Cipher import AES
+import gc
 import keyboard
 from PIL import Image
 from PIL import ImageGrab
@@ -154,12 +155,14 @@ def play_music(file_path):
     elif play_method == "pygame":
         import pygame
 
-        pygame.mixer.init()
-        pygame.mixer.music.set_volume(conf_volume / 100)  # 设置音量
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        pygame.mixer.music.set_volume(conf_volume / 100)
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
             continue
+        pygame.mixer.music.unload()
     elif play_method == "winsound":
         import winsound
 
@@ -577,13 +580,11 @@ def ocr_img_text(
     else:
         image = numpy.array(image)
     if engine == "paddle":
-        # 使用全局单例（2.6.2无oneDNN问题），避免每次重新加载模型
         global _paddle_ocr_instance
         if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
             _paddle_ocr_instance = paddleocr.PaddleOCR(
                 use_angle_cls=True, lang="ch", show_log=False
             )
-        # 2.6.2上使用mkldnn加速CPU推理，对Haswell兼容性好
         import paddle as _pad
         try:
             _pad.set_flags({"FLAGS_use_mkldnn": True})
@@ -594,11 +595,15 @@ def ocr_img_text(
             for line in result:
                 for word in line:
                     print(word)
+        try:
+            _paddle_ocr_instance.model.clear_cache()
+        except Exception:
+            pass
     elif engine == "easyocr":
-        # need to run only once to download and load model into memory
-        # ocr = easyocr.Reader(['ch_sim', 'en'], gpu=False)  # need to run only once to load model into memory
-        ocr = easyocr.Reader(["ch_sim", "en"])
-        result = ocr.readtext(image, detail=conf_detail)
+        global _easyocr_reader_instance
+        if "_easyocr_reader_instance" not in globals() or _easyocr_reader_instance is None:
+            _easyocr_reader_instance = easyocr.Reader(["ch_sim", "en"])
+        result = _easyocr_reader_instance.readtext(image, detail=conf_detail)
         if printResult is True:
             for line in result:
                 if conf_detail == 1:
@@ -670,6 +675,19 @@ def ocr_img_text(
         im_show.save(filepath + "\\" + img_name)
 
     return result, img_name, image, fullscreen
+
+
+def _gc_collect():
+    gc.collect()
+
+
+def _log_memory(tag=""):
+    import psutil
+    process = psutil.Process()
+    mem_mb = process.memory_info().rss / 1024 / 1024
+    msg = f"[Memory{f' {tag}' if tag else ''}] RSS: {mem_mb:.1f} MB"
+    print(msg)
+    textPad_insert(msg)
 
 
 # 截图
@@ -1022,6 +1040,7 @@ def check_screen():
         alert_found = False
         print("WatchDog Checking At ", get_curtime())
         textPad_insert("WatchDog Checking At " + get_curtime())
+        _log_memory("check_start")
 
         # e行PC模式下，使用三张定位图片裁剪有效检测区域（排除标题栏、侧边栏和工具栏）
         crop_region = None
@@ -1126,11 +1145,9 @@ def check_screen():
                 print(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
                 textPad_insert(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
                 crop_region = None
-        # e行PC模式：若定位到裁剪区域，则裁剪图像并重新进行OCR
         if conf_app_name == "e行PC" and crop_region is not None and crop_region != "estimated":
             try:
                 crop_x, crop_y, crop_w, crop_h = crop_region
-                # 限制裁剪高度不超出图像
                 if crop_y + crop_h > image.shape[0]:
                     crop_h = image.shape[0] - crop_y
                 if crop_x + crop_w > image.shape[1]:
@@ -1138,8 +1155,9 @@ def check_screen():
                 if crop_w > 0 and crop_h > 0:
                     cropped_image = image[
                         crop_y : crop_y + crop_h, crop_x : crop_x + crop_w
-                    ]
-                    # 对裁剪后的图像重新做OCR
+                    ].copy()
+                    del image
+                    _gc_collect()
                     ocr_resp, img_filename, image, fullscreen = ocr_img_text(
                         path=cropped_image,
                         saveimg=False,
@@ -1147,6 +1165,8 @@ def check_screen():
                         conf_detail=ocr_detail,
                         engine=ocr_method,
                     )
+                    del cropped_image
+                    _gc_collect()
                     print(f"裁剪后OCR完成，裁剪区域: {crop_region}")
                     textPad_insert(f"裁剪后OCR完成，裁剪区域: {crop_region}")
             except Exception as e:
@@ -1720,6 +1740,8 @@ def check_screen():
                     img_md5 = hashlib.md5(img_base64.encode("utf-8")).hexdigest()
                     if img_md5 not in img_md5_list:
                         img_md5_list.append(img_md5)
+                        if len(img_md5_list) > 500:
+                            img_md5_list = img_md5_list[-200:]
                     else:
                         print("Same Image Sent Already, Skip")
                         textPad_insert("Same Image Sent Already, Skip")
@@ -1786,6 +1808,12 @@ def check_screen():
         print("Error in WatchDog: " + str(e))
         textPad_insert("Error in WatchDog: " + str(e))
         loguru.logger.exception("Error in WatchDog")
+        try:
+            global _paddle_ocr_instance
+            _paddle_ocr_instance = None
+        except Exception:
+            pass
+        _gc_collect()
         if conf_email:
             send_email(
                 "ALERTonScreen Error",
@@ -1798,6 +1826,13 @@ def check_screen():
                 sender_email,
                 smtptype,
             )
+    finally:
+        try:
+            del image
+        except Exception:
+            pass
+        _gc_collect()
+        _log_memory("check_end")
 
 
 @new_thread
