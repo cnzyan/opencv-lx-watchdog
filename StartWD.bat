@@ -31,13 +31,13 @@ if %APPID%==2 goto two
 if %APPID%==1 goto one
 goto begin
 :one
-python check-requirements.py
+python -m pip install -q -r requirements.txt
 python pad-ocr-watchdog.py --UseSerial no
 
 cls
 goto begin
 :two
-python check-requirements.py
+python -m pip install -q -r requirements.txt
 python pad-ocr-watchdog.py --UseSerial yes
 
 cls
@@ -76,7 +76,7 @@ cls
 goto begin
 
 :nine
-python check-requirements.py
+python -m pip install -q -r requirements.txt
 cls
 goto begin
 

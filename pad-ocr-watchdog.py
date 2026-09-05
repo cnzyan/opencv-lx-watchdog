@@ -3455,8 +3455,6 @@ if __name__ == "__main__":
     alert_mp3_file = alert_mp3_file.strip()
 
     if ocr_method == "paddle":
-        import paddleocr
-
         global _rapidocr_instance
         # 预热：初始化 RapidOCR 并做一次空推理，避免首次OCR卡顿
         try:
