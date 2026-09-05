@@ -12,6 +12,7 @@ import loguru
 import hashlib
 import os
 
+# PaddlePaddle 3.x PIR 后端与 OneDNN 不兼容，必须禁用
 os.environ["FLAGS_use_mkldnn"] = "0"
 os.environ["FLAGS_use_onednn"] = "0"
 import sys
@@ -581,32 +582,59 @@ def ocr_img_text(
     else:
         image = numpy.array(image)
     if engine == "paddle":
-        global _paddle_ocr_instance
-        if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
-            _paddle_ocr_instance = paddleocr.PaddleOCR(
-                use_textline_orientation=True, lang="ch", enable_mkldnn=False
+        global _rapidocr_instance
+        if "_rapidocr_instance" not in globals() or _rapidocr_instance is None:
+            from rapidocr import RapidOCR
+
+            _rapidocr_instance = RapidOCR()
+        # 高分屏适配：先将物理像素图缩放到逻辑分辨率，再限制最长边
+        orig_h, orig_w = image.shape[:2]
+        scale = 1.0
+        dpi_scale = get_dpi_scale()
+        if dpi_scale > 1.0:
+            scale = 1.0 / dpi_scale
+        OCR_MAX_SIDE = 1280
+        logic_w, logic_h = int(orig_w * scale), int(orig_h * scale)
+        if max(logic_h, logic_w) > OCR_MAX_SIDE:
+            scale = scale * OCR_MAX_SIDE / max(logic_h, logic_w)
+        if scale < 1.0:
+            new_w, new_h = int(orig_w * scale), int(orig_h * scale)
+            ocr_image = numpy.array(
+                Image.fromarray(image).resize((new_w, new_h), Image.Resampling.LANCZOS)
             )
-        # PaddleOCR 3.x 使用 predict()，返回 OCRResult 迭代器
-        ocr_results = list(_paddle_ocr_instance.predict(image))
-        if ocr_results:
-            r = ocr_results[0]
-            # 将 3.x OCRResult 转为 2.x 兼容格式: [[[box, (text, score)], ...]]
-            compat_result = []
+        else:
+            ocr_image = image
+        # RapidOCR (ONNX Runtime) 推理，比 PaddlePaddle 原生快 10-30 倍
+        t_ocr = time.time()
+        ocr_output = _rapidocr_instance(ocr_image)
+        t_ocr = time.time() - t_ocr
+        print(
+            f"OCR推理耗时: {t_ocr:.1f}s (输入: {ocr_image.shape[1]}x{ocr_image.shape[0]}, DPI缩放: {dpi_scale:.1f}x, 总缩放: {scale:.3f})"
+        )
+        # 转为兼容格式: [[[box, (text, score)], ...]]
+        inv_scale = 1.0 / scale
+        if ocr_output.boxes is not None and ocr_output.txts is not None:
             line_list = []
-            for i in range(len(r["rec_texts"])):
+            for i in range(len(ocr_output.txts)):
                 box = (
-                    r["dt_polys"][i]
-                    if i < len(r["dt_polys"])
-                    else [[0, 0], [0, 0], [0, 0], [0, 0]]
+                    ocr_output.boxes[i].tolist()
+                    if hasattr(ocr_output.boxes[i], "tolist")
+                    else ocr_output.boxes[i]
                 )
-                text = r["rec_texts"][i]
-                score = r["rec_scores"][i] if i < len(r["rec_scores"]) else 0.0
+                if scale != 1.0:
+                    box = [[pt[0] * inv_scale, pt[1] * inv_scale] for pt in box]
+                text = ocr_output.txts[i]
+                score = (
+                    ocr_output.scores[i]
+                    if ocr_output.scores and i < len(ocr_output.scores)
+                    else 0.0
+                )
                 line_list.append([box, (text, score)])
-            if line_list:
-                compat_result.append(line_list)
-            result = compat_result
+            result = [line_list] if line_list else [[]]
         else:
             result = [[]]
+        if ocr_image is not image:
+            del ocr_image
         if printResult is True:
             for line in result:
                 for word in line:
@@ -765,6 +793,7 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                     print("Window Active Failed.")
                     fullscreen = "yes"
                 # 获取窗口的位置和大小
+                # pygetwindow 在 DPI Aware 进程中返回物理像素坐标，无需再乘以 dpi_scale
                 x, y, width, height = (
                     window.left,
                     window.top,
@@ -772,6 +801,17 @@ def screenshot(fullscreen="no", w_title="蓝信", saving=False):
                     window.height,
                 )
                 w_left, w_top = window.left, window.top
+                # 裁剪region到屏幕物理像素范围内
+                sp_w = _cached_screen_phys_w or 3120
+                sp_h = _cached_screen_phys_h or 2080
+                if x < 0:
+                    width += x
+                    x = 0
+                if y < 0:
+                    height += y
+                    y = 0
+                width = min(width, sp_w - x)
+                height = min(height, sp_h - y)
                 # 截取窗口的屏幕截图
                 screenshot = pyautogui.screenshot(region=(x, y, width, height))
             except Exception as e:
@@ -1032,6 +1072,8 @@ def compress_image(img, target_width=1280, target_height=800, quality=85):
 
 
 def check_screen():
+    t_start = time.time()
+    ran = False
     try:
         # print(auto_reply_text)
         global alert_msg, alert_words, alert_mp3_file, wxmsg_touser, last_sent_seprate
@@ -1048,6 +1090,7 @@ def check_screen():
 
         if daemon_permit == False:
             return
+        ran = True
         # print(alert_msg)
         alert_found = False
         print("WatchDog Checking At ", get_curtime())
@@ -1055,140 +1098,169 @@ def check_screen():
         if debug:
             _log_memory("check_start")
 
-        # e行PC模式下，使用三张定位图片裁剪有效检测区域（排除标题栏、侧边栏和工具栏）
+        # e行PC模式：先截图裁剪，再做一次OCR（而非先OCR再裁剪再OCR）
+        ocr_done = False
         crop_region = None
         if conf_app_name == "e行PC":
             dpi_scale = get_dpi_scale()
             print(f"当前系统DPI缩放倍率: {dpi_scale:.2f}x (DPI: {int(dpi_scale * 96)})")
             textPad_insert(f"当前系统DPI缩放倍率: {dpi_scale:.2f}x")
+            # pygetwindow 在 DPI Aware 进程中返回物理像素坐标，直接使用
+            w_left_phys = w_left
+            w_top_phys = w_top
+            # 物理屏幕尺寸，用于裁剪region防止越界
+            screen_phys_w = _cached_screen_phys_w or 3120
+            screen_phys_h = _cached_screen_phys_h or 2080
+
+            # 先截图获取image（物理像素）
+            screenshot_img, _ = screenshot(w_title=window_title)
+            image = numpy.array(screenshot_img)
+
             try:
                 # 定位左侧边缘图：取其最右下坐标作为裁剪左边界
+                # region 裁剪到屏幕范围内
+                def _clamp_region(rx, ry, rw, rh):
+                    """裁剪region到屏幕物理像素范围内"""
+                    rx = max(0, min(rx, screen_phys_w - 1))
+                    ry = max(0, min(ry, screen_phys_h - 1))
+                    rw = min(rw, screen_phys_w - rx)
+                    rh = min(rh, screen_phys_h - ry)
+                    if rw <= 0 or rh <= 0:
+                        return None
+                    return (rx, ry, rw, rh)
+
                 try:
                     left_path = get_resource_path_dpi(
                         "./resources/image/left_edge_hdex_pc.png"
                     )
                     print(f"使用定位图片: {left_path}")
-                    left_loc = pyautogui.locateOnScreen(
-                        left_path,
-                        confidence=0.7,
-                        region=(w_left, w_top, 200, 800),  # 仅在窗口左侧区域搜索
-                    )
-                except pyautogui.ImageNotFoundException:
+                    left_region = _clamp_region(w_left_phys, w_top_phys, 400, 1600)
+                    if left_region:
+                        left_loc = pyautogui.locateOnScreen(
+                            left_path,
+                            confidence=0.7,
+                            region=left_region,
+                        )
+                    else:
+                        left_loc = None
+                except (pyautogui.ImageNotFoundException, ValueError):
                     left_loc = None
                 # 定位右上边缘图：取其最左下坐标作为裁剪右边界
                 try:
-                    right_loc = pyautogui.locateOnScreen(
-                        get_resource_path_dpi(
-                            "./resources/image/rightup_edge_hdex_pc.png"
-                        ),
-                        confidence=0.7,
-                        region=(w_left + 500, w_top, 400, 600),  # 仅在窗口右侧区域搜索
+                    right_region = _clamp_region(
+                        w_left_phys + 1000, w_top_phys, 800, 1200
                     )
-                except pyautogui.ImageNotFoundException:
+                    if right_region:
+                        right_loc = pyautogui.locateOnScreen(
+                            get_resource_path_dpi(
+                                "./resources/image/rightup_edge_hdex_pc.png"
+                            ),
+                            confidence=0.7,
+                            region=right_region,
+                        )
+                    else:
+                        right_loc = None
+                except (pyautogui.ImageNotFoundException, ValueError):
                     right_loc = None
                 # 定位工具栏图（在聊天下方）：取其最上坐标作为裁剪下边界
                 try:
-                    toolbar_loc = pyautogui.locateOnScreen(
-                        get_resource_path_dpi("./resources/image/toolbar_hdex_pc.png"),
-                        confidence=0.7,
-                        region=(w_left, w_top, 800, 200),  # 仅在窗口顶部区域搜索
-                    )
-                except pyautogui.ImageNotFoundException:
+                    toolbar_region = _clamp_region(w_left_phys, w_top_phys, 1600, 400)
+                    if toolbar_region:
+                        toolbar_loc = pyautogui.locateOnScreen(
+                            get_resource_path_dpi(
+                                "./resources/image/toolbar_hdex_pc.png"
+                            ),
+                            confidence=0.7,
+                            region=toolbar_region,
+                        )
+                    else:
+                        toolbar_loc = None
+                except (pyautogui.ImageNotFoundException, ValueError):
                     toolbar_loc = None
-                # 分别处理每个定位结果：找到的图片约束对应边界，未找到的不做限制
-                # 左边界：找到左侧边缘图则取其最右下x，否则取0
+                # 分别处理每个定位结果
                 if left_loc:
                     crop_left = left_loc.left + left_loc.width
                 else:
-                    crop_left = 0
+                    crop_left = None
                     print("未找到left_edge_hdex_pc.png，左边界不裁剪")
-                # 右边界：找到右上边缘图则取其最左下x，否则取图像右边界（后续由图像宽度决定）
                 if right_loc:
                     crop_right = right_loc.left
                 else:
-                    crop_right = None  # 标记为未找到，后续用图像宽度
+                    crop_right = None
                     print("未找到rightup_edge_hdex_pc.png，右边界不裁剪")
-                # 下边界：找到工具栏图则取其最上y，否则取图像下边界
                 if toolbar_loc:
                     crop_bottom = toolbar_loc.top
                 else:
-                    crop_bottom = None  # 标记为未找到，后续用图像高度
+                    crop_bottom = None
                     print("未找到toolbar_hdex_pc.png，下边界不裁剪")
 
-                if left_loc or right_loc or toolbar_loc:
-                    # 至少有一个定位成功时，构建裁剪区域（缺失的边界先用占位值，后续在裁剪时根据图像尺寸修正）
-                    # 临时占位：宽和高先用大值，裁剪时会根据图像大小截断
-                    tmp_crop_right = crop_right if crop_right is not None else 99999
-                    tmp_crop_bottom = crop_bottom if crop_bottom is not None else 99999
-                    crop_region = (
-                        crop_left - w_left,
-                        0,  # 上边界从0开始（窗口顶部）
-                        tmp_crop_right - crop_left,
-                        tmp_crop_bottom - w_top,
-                    )
-                    print(f"e行PC裁剪区域: {crop_region}")
-                    textPad_insert(f"e行PC裁剪区域: {crop_region}")
+                # 根据定位结果计算裁剪区域（物理像素坐标系）
+                phys_h, phys_w = image.shape[:2]
+                x1 = (crop_left - w_left_phys) if crop_left is not None else 0
+                y1 = 0
+                x2 = (crop_right - w_left_phys) if crop_right is not None else phys_w
+                y2 = (crop_bottom - w_top_phys) if crop_bottom is not None else phys_h
+                # 边界修正
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(phys_w, x2), min(phys_h, y2)
+                if x2 > x1 and y2 > y1:
+                    image = image[y1:y2, x1:x2].copy()
+                    print(f"e行PC裁剪区域(物理像素): ({x1}, {y1}, {x2}, {y2})")
+                    textPad_insert(f"e行PC裁剪区域(物理像素): ({x1}, {y1}, {x2}, {y2})")
+                elif crop_left is None and crop_right is None and crop_bottom is None:
+                    # 所有定位图片均未找到，使用估算裁剪区域
+                    image = image[0 : phys_h - 300, 600 : phys_w - 100].copy()
+                    print(f"e行PC使用估算裁剪区域")
+                    textPad_insert(f"e行PC使用估算裁剪区域")
                 else:
-                    # 所有图片均未找到时，使用基于图像尺寸的估算裁剪区域
-                    # 此处image尚未获取，在OCR后根据实际图像尺寸计算
-                    print("e行PC定位图片均未找到，将在OCR后使用估算裁剪区域")
-                    crop_region = "estimated"
+                    print("e行PC裁剪区域无效，使用全窗口检测")
+                    textPad_insert("e行PC裁剪区域无效，使用全窗口检测")
+
+                # 裁剪后将物理像素图缩放到逻辑分辨率，加速OCR
+                if dpi_scale > 1.0:
+                    cur_h, cur_w = image.shape[:2]
+                    logic_w, logic_h = int(cur_w / dpi_scale), int(cur_h / dpi_scale)
+                    image = numpy.array(
+                        Image.fromarray(image).resize(
+                            (logic_w, logic_h), Image.Resampling.LANCZOS
+                        )
+                    )
+                    print(f"裁剪后缩放: {cur_w}x{cur_h} → {logic_w}x{logic_h}")
             except Exception as e:
                 print(f"e行PC区域定位失败: {e}，使用全窗口检测")
                 textPad_insert(f"e行PC区域定位失败: {e}，使用全窗口检测")
-                crop_region = None
-
-        ocr_resp, img_filename, image, fullscreen = ocr_img_text(
-            saveimg=False, printResult=False, conf_detail=ocr_detail, engine=ocr_method
-        )
-
-        # e行PC模式：若定位图片未找到，使用图像实际尺寸估算裁剪区域
-        if conf_app_name == "e行PC" and crop_region == "estimated":
-            try:
-                img_h, img_w = image.shape[:2]
-                crop_region = (
-                    300,  # crop_x: 避开左侧边栏（约300px）
-                    0,  # crop_y: 从顶部开始
-                    img_w - 350,  # crop_w: 宽度减去左右边距
-                    img_h - 150,  # crop_h: 高度减去底部工具栏
+                # image 已在上方截图赋值，直接用它做OCR
+                ocr_resp, img_filename, image, fullscreen = ocr_img_text(
+                    path=image,
+                    saveimg=False,
+                    printResult=False,
+                    conf_detail=ocr_detail,
+                    engine=ocr_method,
                 )
-                print(
-                    f"e行PC使用估算裁剪区域(基于图像尺寸{img_w}x{img_h}): {crop_region}"
-                )
-                textPad_insert(f"e行PC使用估算裁剪区域: {crop_region}")
-            except Exception as e:
-                print(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
-                textPad_insert(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
-                crop_region = None
-        if (
-            conf_app_name == "e行PC"
-            and crop_region is not None
-            and crop_region != "estimated"
-        ):
-            try:
-                crop_x, crop_y, crop_w, crop_h = crop_region
-                if crop_y + crop_h > image.shape[0]:
-                    crop_h = image.shape[0] - crop_y
-                if crop_x + crop_w > image.shape[1]:
-                    crop_w = image.shape[1] - crop_x
-                if crop_w > 0 and crop_h > 0:
-                    cropped_image = image[
-                        crop_y : crop_y + crop_h, crop_x : crop_x + crop_w
-                    ].copy()
-                    del image
-                    ocr_resp, img_filename, image, fullscreen = ocr_img_text(
-                        path=cropped_image,
-                        saveimg=False,
-                        printResult=False,
-                        conf_detail=ocr_detail,
-                        engine=ocr_method,
-                    )
-                    del cropped_image
-                    print(f"裁剪后OCR完成，裁剪区域: {crop_region}")
-                    textPad_insert(f"裁剪后OCR完成，裁剪区域: {crop_region}")
-            except Exception as e:
-                print(f"裁剪后OCR失败: {e}")
-                textPad_insert(f"裁剪后OCR失败: {e}")
+                fullscreen = "no"
+                ocr_done = True
+
+        if conf_app_name == "e行PC" and crop_region is not None:
+            # e行PC：直接对裁剪后的image做一次OCR
+            ocr_resp, img_filename, image, fullscreen = ocr_img_text(
+                path=image,
+                saveimg=False,
+                printResult=False,
+                conf_detail=ocr_detail,
+                engine=ocr_method,
+            )
+            fullscreen = "no"
+            ocr_done = True
+
+        if not ocr_done:
+            # 非e行PC模式：正常OCR
+            ocr_resp, img_filename, image, fullscreen = ocr_img_text(
+                saveimg=False,
+                printResult=False,
+                conf_detail=ocr_detail,
+                engine=ocr_method,
+            )
+
         if ocr_method == "tesseract":
             if ocr_detail == 1:
                 ocr_resp_tes = "".join(t for t in ocr_resp["text"] if t)
@@ -1526,7 +1598,7 @@ def check_screen():
                                 location_q = pyautogui.locateOnScreen(
                                     quota_image, confidence=0.7
                                 )
-                            except pyautogui.ImageNotFoundException:
+                            except (pyautogui.ImageNotFoundException, ValueError):
                                 location_q = None
                             if location_q:
                                 print("图片位置:", location_q)
@@ -1564,7 +1636,7 @@ def check_screen():
                                 location_q = pyautogui.locateOnScreen(
                                     quota_image, confidence=0.8
                                 )  # 查找按钮图标
-                            except pyautogui.ImageNotFoundException:
+                            except (pyautogui.ImageNotFoundException, ValueError):
                                 location_q = None
                             if location_q:
                                 print("图片位置:", location_q)
@@ -1595,7 +1667,7 @@ def check_screen():
                                 location_q = pyautogui.locateOnScreen(
                                     quota_image, confidence=0.8
                                 )
-                            except pyautogui.ImageNotFoundException:
+                            except (pyautogui.ImageNotFoundException, ValueError):
                                 location_q = None
                             if location_q:
                                 print("图片位置:", location_q)
@@ -1646,7 +1718,7 @@ def check_screen():
                                 location_q = pyautogui.locateOnScreen(
                                     quota_image, confidence=0.8
                                 )  # 查找按钮图标
-                            except pyautogui.ImageNotFoundException:
+                            except (pyautogui.ImageNotFoundException, ValueError):
                                 location_q = None
                             if location_q:
                                 print("图片位置:", location_q)
@@ -1700,7 +1772,7 @@ def check_screen():
                                 pass
                         else:
                             print("未找到图片")
-                    except pyautogui.ImageNotFoundException:
+                    except (pyautogui.ImageNotFoundException, ValueError):
                         print("未找到图片")
                     # 点击输入框，不是必须 ====end
                     time.sleep(0.5)
@@ -1733,7 +1805,7 @@ def check_screen():
                                     location[1] + 20,
                                     button="left",
                                 )
-                        except pyautogui.ImageNotFoundException:
+                        except (pyautogui.ImageNotFoundException, ValueError):
                             print("未找到图片")
                             textPad_insert(
                                 "未找到发送按钮图片，可能是屏幕分辨率不匹配，请检查资源图片。"
@@ -1825,8 +1897,8 @@ def check_screen():
         textPad_insert("Error in WatchDog: " + str(e))
         loguru.logger.exception("Error in WatchDog")
         try:
-            global _paddle_ocr_instance
-            _paddle_ocr_instance = None
+            global _rapidocr_instance
+            _rapidocr_instance = None
         except Exception:
             pass
         _gc_collect()
@@ -1850,6 +1922,11 @@ def check_screen():
         _gc_collect()
         if debug:
             _log_memory("check_end")
+        if ran:
+            t_elapsed = time.time() - t_start
+            msg = f"本轮检查耗时: {t_elapsed:.1f}s"
+            print(msg)
+            textPad_insert(msg)
 
 
 @new_thread
@@ -2700,8 +2777,7 @@ def get_conf_from_file(config_path, config_section, conf_list):  # 读取配置�
 
 
 def schedule_load(interval):
-    # 定时加载配置文件
-    schedule.every(interval).seconds.do(check_screen)  # 每10秒执行一次，检查屏幕
+    # 定时加载配置文件（check_screen 不走 schedule，由 daemon_worker 柔性调度）
     schedule.every(60 * 20).seconds.do(clean_msg_store)  # 每20分执行一次，清除消息存储
     schedule.every(120).seconds.do(load_alert_words)  # 每120秒执行一次，加载关键词
     schedule.every(120).seconds.do(load_contacts)  # 每120秒执行一次，加载联系人
@@ -2716,32 +2792,51 @@ def schedule_load(interval):
 
 @new_thread
 def daemon_worker():
-    # 定时器
+    # 柔性定时器：check_screen 完成后间隔 daemon_interval 秒再执行下一轮
+    # 其他辅助任务仍用 schedule 调度
     global app_run, daemon_interval, exit_flag
 
     running_interval = 0
+    next_check = time.time()  # 首轮立即执行
+
     while True:
-        if exit_flag.is_set() == True:
+        if exit_flag.is_set():
             break
 
+        # 间隔变更时重置调度
         if running_interval != daemon_interval:
             schedule.clear()
             running_interval = daemon_interval
             if running_interval < 1:
                 running_interval = 1
             print("Daemon interval changed to: ", running_interval)
-            # 重新加载定时任务
             schedule_load(running_interval)
-        while (
-            app_run == True
-            and exit_flag.is_set() == False
-            and running_interval == daemon_interval
-        ):
-            # print("Daemon running...")
-            # 执行定时任务
-            schedule.run_pending()
-            idle = schedule.idle_seconds()
-            time.sleep(max(1, idle) if idle is not None else 1)
+            next_check = time.time()
+
+        if not app_run or exit_flag.is_set() or running_interval != daemon_interval:
+            continue
+
+        # 执行辅助定时任务
+        schedule.run_pending()
+
+        # 柔性调度 check_screen
+        now = time.time()
+        if now >= next_check:
+            t0 = time.time()
+            check_screen()
+            elapsed = time.time() - t0
+            if elapsed >= daemon_interval:
+                # 任务耗时超过间隔，完成后等 0.1s 进入下一轮
+                next_check = time.time() + 0.1
+            else:
+                # 任务耗时未超过间隔，按固定周期调度
+                next_check = next_check + daemon_interval
+
+        # 等待到下一个事件（check_screen 或 schedule 任务）
+        idle_sched = schedule.idle_seconds()
+        wait_sched = max(1, idle_sched) if idle_sched is not None else 1
+        wait_check = max(0.1, next_check - time.time())
+        time.sleep(min(wait_sched, wait_check))
 
 
 def quit_program():
@@ -2924,22 +3019,76 @@ def get_resource_path(relative_path):
 
 # 获取当前系统DPI缩放比例
 _cached_dpi_scale = None
+_cached_screen_phys_w = None
+_cached_screen_phys_h = None
 
 
 def get_dpi_scale():
-    """获取当前系统DPI缩放比例，如1.0、1.25、1.5、2.0等"""
-    global _cached_dpi_scale
+    """获取当前系统DPI缩放比例，如1.0、1.25、1.5、2.0等。
+    优先从注册表读取 AppliedDPI（最可靠），
+    备用方案：对比 ImageGrab 物理分辨率与 GetSystemMetrics 逻辑分辨率。"""
+    global _cached_dpi_scale, _cached_screen_phys_w, _cached_screen_phys_h
     if _cached_dpi_scale is not None:
         return _cached_dpi_scale
+
+    # 先获取物理屏幕尺寸（各方案都需要）
     try:
-        windll = ctypes.windll
-        user32 = windll.user32
-        hdc = user32.GetDC(0)
-        dpi = windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
-        user32.ReleaseDC(0, hdc)
-        _cached_dpi_scale = dpi / 96.0
+        grab = ImageGrab.grab()
+        _cached_screen_phys_w = grab.size[0]
+        _cached_screen_phys_h = grab.size[1]
+        del grab
     except Exception:
+        pass
+
+    # 方案1：读取注册表 AppliedDPI（最可靠，不受进程DPI感知状态影响）
+    try:
+        import winreg
+
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop\WindowMetrics"
+        )
+        applied_dpi, _ = winreg.QueryValueEx(key, "AppliedDPI")
+        winreg.CloseKey(key)
+        if applied_dpi and applied_dpi >= 96:
+            _cached_dpi_scale = applied_dpi / 96.0
+            print(
+                f"[DPI诊断] 注册表方案 AppliedDPI={applied_dpi}, 缩放={_cached_dpi_scale}"
+            )
+            return _cached_dpi_scale
+    except Exception as e:
+        print(f"[DPI诊断] 注册表方案失败: {e}")
+
+    # 方案2：ImageGrab 物理宽度 / GetSystemMetrics 逻辑宽度
+    # 注意：如果进程是DPI Aware，GetSystemMetrics返回物理像素，此方案会得到1.0
+    try:
+        user32 = ctypes.windll.user32
+        logic_w = user32.GetSystemMetrics(0)
+        phys_w = _cached_screen_phys_w or 0
+        print(f"[DPI诊断] ImageGrab方案 物理宽度={phys_w}, 逻辑宽度={logic_w}")
+        if logic_w > 0 and phys_w > 0:
+            _cached_dpi_scale = phys_w / logic_w
+        else:
+            _cached_dpi_scale = 1.0
+    except Exception as e:
+        print(f"[DPI诊断] ImageGrab方案失败: {e}")
         _cached_dpi_scale = 1.0
+
+    # 方案3：如果前两个方案都返回1.0但分辨率明显大于1200，说明是高DPI但检测失败
+    if (
+        _cached_dpi_scale == 1.0
+        and _cached_screen_phys_w
+        and _cached_screen_phys_w > 1200
+    ):
+        phys_w = _cached_screen_phys_w
+        common_scales = [1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
+        best = min(
+            common_scales,
+            key=lambda s: abs(phys_w / s - round(phys_w / s / 16) * 16),
+        )
+        _cached_dpi_scale = best
+        print(f"[DPI诊断] 估算方案 物理宽度={phys_w}, 推测缩放={_cached_dpi_scale}")
+
+    print(f"[DPI诊断] 最终缓存缩放={_cached_dpi_scale}")
     return _cached_dpi_scale
 
 
@@ -3176,6 +3325,31 @@ def process_queue():
 
 
 if __name__ == "__main__":
+    # 全局异常捕获，防止静默崩溃
+    import threading
+
+    def _global_excepthook(exc_type, exc_value, exc_tb):
+        import traceback
+
+        tb = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        print(f"UNCAUGHT EXCEPTION:\n{tb}")
+        loguru.logger.exception("Uncaught exception")
+
+    sys.excepthook = _global_excepthook
+
+    def _thread_excepthook(args):
+        import traceback
+
+        tb = "".join(
+            traceback.format_exception(
+                args.exc_type, args.exc_value, args.exc_traceback
+            )
+        )
+        print(f"UNCAUGHT THREAD EXCEPTION (thread={args.thread}):\n{tb}")
+        loguru.logger.exception(f"Uncaught thread exception in {args.thread}")
+
+    threading.excepthook = _thread_excepthook
+
     prog_window_title = "桌面关键字监视器"
     root = None  # 初始化tkinter主窗口
     root = tk.Tk()
@@ -3190,7 +3364,8 @@ if __name__ == "__main__":
     # 事件队列
     ui_queue = queue.Queue()
 
-    icon, textPad = "", ""
+    icon = ""
+    textPad = None
     try:
         w_title = "Screen OCR Watchdog"  # 控制台窗口标题 通过 title 命令在bat文件中设置
         w_console = pygetwindow.getWindowsWithTitle(w_title)[0]
@@ -3281,6 +3456,18 @@ if __name__ == "__main__":
 
     if ocr_method == "paddle":
         import paddleocr
+
+        global _rapidocr_instance
+        # 预热：初始化 RapidOCR 并做一次空推理，避免首次OCR卡顿
+        try:
+            from rapidocr import RapidOCR
+
+            _rapidocr_instance = RapidOCR()
+            _rapidocr_instance(numpy.zeros((64, 64, 3), dtype=numpy.uint8))
+            print("RapidOCR 模型预热完成")
+        except Exception as e:
+            print(f"RapidOCR 预热失败: {e}")
+            _rapidocr_instance = None
     elif ocr_method == "easyocr":
         import easyocr
         import cv2
