@@ -11,6 +11,9 @@ import smtplib
 import loguru
 import hashlib
 import os
+
+os.environ["FLAGS_use_mkldnn"] = "0"
+os.environ["FLAGS_use_onednn"] = "0"
 import sys
 import re
 import base64
@@ -580,28 +583,34 @@ def ocr_img_text(
     if engine == "paddle":
         global _paddle_ocr_instance
         if "_paddle_ocr_instance" not in globals() or _paddle_ocr_instance is None:
-            try:
-                import torch
-            except Exception:
-                pass
             _paddle_ocr_instance = paddleocr.PaddleOCR(
-                use_angle_cls=True, lang="ch", show_log=False
+                use_textline_orientation=True, lang="ch", enable_mkldnn=False
             )
-            import paddle as _pad
-
-            try:
-                _pad.set_flags({"FLAGS_use_mkldnn": True})
-            except Exception:
-                pass
-        result = _paddle_ocr_instance.ocr(image, cls=True)
+        # PaddleOCR 3.x 使用 predict()，返回 OCRResult 迭代器
+        ocr_results = list(_paddle_ocr_instance.predict(image))
+        if ocr_results:
+            r = ocr_results[0]
+            # 将 3.x OCRResult 转为 2.x 兼容格式: [[[box, (text, score)], ...]]
+            compat_result = []
+            line_list = []
+            for i in range(len(r["rec_texts"])):
+                box = (
+                    r["dt_polys"][i]
+                    if i < len(r["dt_polys"])
+                    else [[0, 0], [0, 0], [0, 0], [0, 0]]
+                )
+                text = r["rec_texts"][i]
+                score = r["rec_scores"][i] if i < len(r["rec_scores"]) else 0.0
+                line_list.append([box, (text, score)])
+            if line_list:
+                compat_result.append(line_list)
+            result = compat_result
+        else:
+            result = [[]]
         if printResult is True:
             for line in result:
                 for word in line:
                     print(word)
-        try:
-            _paddle_ocr_instance.model.clear_cache()
-        except Exception:
-            pass
     elif engine == "easyocr":
         global _easyocr_reader_instance
         if (
@@ -3271,7 +3280,6 @@ if __name__ == "__main__":
     alert_mp3_file = alert_mp3_file.strip()
 
     if ocr_method == "paddle":
-        import torch
         import paddleocr
     elif ocr_method == "easyocr":
         import easyocr
