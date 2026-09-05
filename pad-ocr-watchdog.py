@@ -1,7 +1,7 @@
 from Crypto.Cipher import AES
 import gc
 import keyboard
-from PIL import Image,ImageGrab,ImageTk, ImageSequence
+from PIL import Image, ImageGrab, ImageTk, ImageSequence
 import numpy
 import time
 import requests
@@ -587,11 +587,12 @@ def ocr_img_text(
             _paddle_ocr_instance = paddleocr.PaddleOCR(
                 use_angle_cls=True, lang="ch", show_log=False
             )
-        import paddle as _pad
-        try:
-            _pad.set_flags({"FLAGS_use_mkldnn": True})
-        except Exception:
-            pass
+            import paddle as _pad
+
+            try:
+                _pad.set_flags({"FLAGS_use_mkldnn": True})
+            except Exception:
+                pass
         result = _paddle_ocr_instance.ocr(image, cls=True)
         if printResult is True:
             for line in result:
@@ -603,7 +604,10 @@ def ocr_img_text(
             pass
     elif engine == "easyocr":
         global _easyocr_reader_instance
-        if "_easyocr_reader_instance" not in globals() or _easyocr_reader_instance is None:
+        if (
+            "_easyocr_reader_instance" not in globals()
+            or _easyocr_reader_instance is None
+        ):
             _easyocr_reader_instance = easyocr.Reader(["ch_sim", "en"])
         result = _easyocr_reader_instance.readtext(image, detail=conf_detail)
         if printResult is True:
@@ -648,8 +652,13 @@ def ocr_img_text(
                     # 绘制文字
                     top_left = (int(box[0][0]), int(box[0][1]) - 10)
                     im_show = cv2.putText(
-                        im_show, text, top_left,
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2,
+                        im_show,
+                        text,
+                        top_left,
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (0, 255, 0),
+                        2,
                     )
         elif engine == "easyocr":
             im_show = image.copy()
@@ -682,6 +691,7 @@ def _gc_collect():
 
 def _log_memory(tag=""):
     import psutil
+
     process = psutil.Process()
     mem_mb = process.memory_info().rss / 1024 / 1024
     msg = f"[Memory{f' {tag}' if tag else ''}] RSS: {mem_mb:.1f} MB"
@@ -1129,17 +1139,23 @@ def check_screen():
                 img_h, img_w = image.shape[:2]
                 crop_region = (
                     300,  # crop_x: 避开左侧边栏（约300px）
-                    0,    # crop_y: 从顶部开始
+                    0,  # crop_y: 从顶部开始
                     img_w - 350,  # crop_w: 宽度减去左右边距
                     img_h - 150,  # crop_h: 高度减去底部工具栏
                 )
-                print(f"e行PC使用估算裁剪区域(基于图像尺寸{img_w}x{img_h}): {crop_region}")
+                print(
+                    f"e行PC使用估算裁剪区域(基于图像尺寸{img_w}x{img_h}): {crop_region}"
+                )
                 textPad_insert(f"e行PC使用估算裁剪区域: {crop_region}")
             except Exception as e:
                 print(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
                 textPad_insert(f"e行PC估算裁剪区域失败: {e}，使用全窗口检测")
                 crop_region = None
-        if conf_app_name == "e行PC" and crop_region is not None and crop_region != "estimated":
+        if (
+            conf_app_name == "e行PC"
+            and crop_region is not None
+            and crop_region != "estimated"
+        ):
             try:
                 crop_x, crop_y, crop_w, crop_h = crop_region
                 if crop_y + crop_h > image.shape[0]:
@@ -3255,6 +3271,7 @@ if __name__ == "__main__":
     alert_mp3_file = alert_mp3_file.strip()
 
     if ocr_method == "paddle":
+        import torch
         import paddleocr
     elif ocr_method == "easyocr":
         import easyocr
